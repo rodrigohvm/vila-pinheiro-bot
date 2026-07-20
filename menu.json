@@ -1,0 +1,41 @@
+{
+  "_comentario": "Edite os textos abaixo com as respostas reais da Vila Pinheiro. 'aliases' são as palavras que, se o cliente digitar, disparam essa resposta pronta (sem gastar com IA). 'id' é usado internamente quando o cliente clica num botão do menu.",
+
+  "welcome_text": "Olá! 🌿 Seja bem-vindo(a) à Vila Pinheiro Cabanas. Escolha uma opção abaixo ou digite sua dúvida:",
+
+  "items": [
+    {
+      "id": "precos",
+      "title": "💰 Preços",
+      "aliases": ["preço", "preco", "precos", "preços", "valor", "valores", "quanto custa", "diária", "diaria"],
+      "response": "Nossas diárias variam conforme a temporada e o tipo de cabana. Vou te enviar a tabela completa em PDF 👇",
+      "pdf": "tabela-precos"
+    },
+    {
+      "id": "localizacao",
+      "title": "📍 Localização",
+      "aliases": ["localização", "localizacao", "onde fica", "endereço", "endereco", "como chegar", "mapa"],
+      "response": "Ficamos em Santa Teresa, Espírito Santo. Segue o mapa e as instruções de acesso 👇",
+      "pdf": "mapa-acesso"
+    },
+    {
+      "id": "politicas",
+      "title": "📋 Check-in e políticas",
+      "aliases": ["checkin", "check-in", "checkout", "check-out", "cancelamento", "política", "politica", "horário", "horario"],
+      "response": "[EDITE AQUI: horários de check-in/check-out e política de cancelamento da Vila Pinheiro]"
+    },
+    {
+      "id": "comodidades",
+      "title": "🏡 Comodidades",
+      "aliases": ["comodidade", "wifi", "piscina", "café da manhã", "cafe da manha", "pet", "animais", "ar condicionado"],
+      "response": "[EDITE AQUI: lista das comodidades das cabanas]"
+    },
+    {
+      "id": "atendente",
+      "title": "🙋 Falar com atendente",
+      "aliases": ["atendente", "humano", "pessoa", "falar com alguem", "reservar", "quero reservar", "fechar reserva", "disponibilidade"],
+      "response": "Perfeito! Já vou te conectar com nosso time para seguir com os detalhes. 🙂",
+      "escalate": true
+    }
+  ]
+}

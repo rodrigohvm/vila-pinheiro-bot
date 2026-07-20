@@ -1,0 +1,6 @@
+{
+  "_comentario": "Adicione aqui seus PDFs. A chave (à esquerda) é o 'apelido' que você usa no system-prompt.txt junto com a tag [ENVIAR_PDF:apelido]. O valor (à direita) é o link público do Google Drive (compartilhamento: 'Qualquer pessoa com o link pode visualizar').",
+
+  "tabela-precos": "https://drive.google.com/file/d/COLE_O_ID_DO_ARQUIVO_AQUI/view?usp=sharing",
+  "mapa-acesso": "https://drive.google.com/file/d/COLE_O_ID_DO_ARQUIVO_AQUI/view?usp=sharing"
+}
