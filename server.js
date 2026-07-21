@@ -161,6 +161,7 @@ app.get('/webhook/whatsapp', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
+  console.log('🔍 Verificação de webhook recebida:', { mode, token });
 
   if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
     return res.status(200).send(challenge);
@@ -171,6 +172,7 @@ app.get('/webhook/whatsapp', (req, res) => {
 // Recebimento de mensagens novas do WhatsApp
 app.post('/webhook/whatsapp', async (req, res) => {
   res.sendStatus(200); // responde rápido pra Meta não reenviar o mesmo evento
+  console.log('📩 Webhook do WhatsApp recebido:', JSON.stringify(req.body));
 
   try {
     const entry = req.body.entry?.[0];
