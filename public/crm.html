@@ -212,6 +212,40 @@
     font-size: 12px; color: var(--ink); display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
   .ics-box input { flex: 1; min-width: 220px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+  /* ---------- Dashboard ---------- */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .kpi-card { background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .kpi-card .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
+  .kpi-card .kpi-value { font-family: 'Fraunces', serif; font-size: 26px; font-weight: 600; color: var(--ink); }
+  .kpi-card .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .kpi-card.clay .kpi-value { color: var(--clay); }
+  .kpi-card.moss .kpi-value { color: var(--moss); }
+
+  .dash-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 820px) { .dash-columns { grid-template-columns: 1fr; } }
+  .dash-panel { background: var(--paper-raised); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .dash-panel h3 { margin: 0 0 14px; font-size: 15px; }
+  .dash-list { list-style: none; margin: 0; padding: 0; }
+  .dash-list li { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .dash-list li:last-child { border-bottom: none; }
+  .dash-list .d-data { font-family: 'JetBrains Mono', monospace; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .dash-empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+
+  /* ---------- Badges de pagamento ---------- */
+  .pag-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+  .pag-badge.pago { background: var(--moss-pale); color: var(--moss); }
+  .pag-badge.parcial { background: #F3E9D0; color: #8A6D1F; }
+  .pag-badge.pendente { background: #EFE7D3; color: var(--muted); }
+  .pag-badge.atrasado { background: #F3E2D6; color: var(--clay); }
+
+  /* ---------- Parcelas no modal ---------- */
+  .parcelas-lista { margin-top: 6px; }
+  .parcela-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .parcela-row:last-child { border-bottom: none; }
+  .parcela-row input[type="checkbox"] { width: 16px; height: 16px; }
+  .parcela-row .p-info { flex: 1; }
+  .parcela-row .p-valor { font-family: 'JetBrains Mono', monospace; }
 </style>
 </head>
 <body>
@@ -229,15 +263,63 @@
       <div class="brand">Vila Pinheiro</div>
       <div class="subtitle">Painel interno</div>
       <nav>
-        <a data-view="reservas" class="active" onclick="mudarView('reservas')">Reservas</a>
+        <a data-view="dashboard" class="active" onclick="mudarView('dashboard')">Dashboard</a>
+        <a data-view="reservas" onclick="mudarView('reservas')">Reservas</a>
         <a data-view="clientes" onclick="mudarView('clientes')">Clientes</a>
         <a data-view="calendario" onclick="mudarView('calendario')">Calendário</a>
       </nav>
     </aside>
 
     <main>
+      <!-- ===================== VIEW: DASHBOARD ===================== -->
+      <section id="view-dashboard" class="view active">
+        <div class="view-header">
+          <h2>Dashboard</h2>
+          <span class="count" id="dash-hoje"></span>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Cabanas ocupadas hoje</div>
+            <div class="kpi-value" id="kpi-ocupacao-hoje">—</div>
+            <div class="kpi-sub" id="kpi-ocupacao-hoje-sub"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Taxa de ocupação do mês</div>
+            <div class="kpi-value" id="kpi-taxa-ocupacao">—</div>
+          </div>
+          <div class="kpi-card moss">
+            <div class="kpi-label">Recebido</div>
+            <div class="kpi-value" id="kpi-total-pago">—</div>
+          </div>
+          <div class="kpi-card clay">
+            <div class="kpi-label">Atrasado</div>
+            <div class="kpi-value" id="kpi-total-atrasado">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">A receber (pendente)</div>
+            <div class="kpi-value" id="kpi-total-pendente">—</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Total confirmado</div>
+            <div class="kpi-value" id="kpi-total-confirmado">—</div>
+          </div>
+        </div>
+
+        <div class="dash-columns">
+          <div class="dash-panel">
+            <h3>🏡 Ocupadas agora</h3>
+            <ul class="dash-list" id="dash-ocupacao-lista"></ul>
+          </div>
+          <div class="dash-panel">
+            <h3>📅 Próximos 7 dias</h3>
+            <ul class="dash-list" id="dash-proximos-lista"></ul>
+          </div>
+        </div>
+      </section>
+
       <!-- ===================== VIEW: RESERVAS ===================== -->
-      <section id="view-reservas" class="view active">
+      <section id="view-reservas" class="view">
         <div class="view-header">
           <h2>Reservas</h2>
           <span class="count" id="count-reservas"></span>
@@ -252,11 +334,18 @@
           <select id="f-cabana" onchange="carregarRegistros()">
             <option value="">Todas as cabanas</option>
           </select>
+          <select id="f-pagamento" onchange="carregarRegistros()">
+            <option value="">Todo status de pagamento</option>
+            <option value="pago">Pago</option>
+            <option value="parcial">Parcial</option>
+            <option value="pendente">Pendente</option>
+            <option value="atrasado">Atrasado</option>
+          </select>
         </div>
         <table>
           <thead>
             <tr>
-              <th>Tipo</th><th>Hóspede</th><th>Cabana</th><th>Check-in</th><th>Check-out</th><th>Telefone</th><th></th>
+              <th>Tipo</th><th>Hóspede</th><th>Cabana</th><th>Check-in</th><th>Check-out</th><th>Valor</th><th>Pagamento</th><th>Telefone</th><th></th>
             </tr>
           </thead>
           <tbody id="tabela-registros"></tbody>
@@ -278,7 +367,7 @@
         </div>
         <table>
           <thead>
-            <tr><th>Nome</th><th>Telefone</th><th>Email</th><th>Estadias</th><th>Cabanas já ocupadas</th></tr>
+            <tr><th>Nome</th><th>Telefone</th><th>Email</th><th>Estadias</th><th>Cabanas já ocupadas</th><th>Total gasto</th></tr>
           </thead>
           <tbody id="tabela-clientes"></tbody>
         </table>
@@ -327,6 +416,10 @@
       <input id="edit-checkin" type="text" />
       <label>Check-out (dd/mm/aa)</label>
       <input id="edit-checkout" type="text" />
+      <div id="edit-parcelas-wrapper" style="display:none;">
+        <label>Parcelas (marque as pagas)</label>
+        <div class="parcelas-lista" id="edit-parcelas-lista"></div>
+      </div>
       <details>
         <summary>Ver todos os dados (avançado)</summary>
         <label>JSON completo</label>
@@ -377,6 +470,7 @@
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     preencherFiltroCabanas();
+    carregarDashboard();
     carregarRegistros();
     carregarClientes();
     montarLegenda();
@@ -409,6 +503,49 @@
     document.querySelectorAll('nav a').forEach((a) => a.classList.remove('active'));
     document.querySelector(`nav a[data-view="${nome}"]`).classList.add('active');
     if (nome === 'calendario') renderizarCalendario();
+    if (nome === 'dashboard') carregarDashboard();
+  }
+
+  // ---------------- Dashboard ----------------
+  async function carregarDashboard() {
+    const res = await authFetch('/api/dashboard');
+    const dash = await res.json();
+    renderizarDashboard(dash);
+  }
+
+  function renderizarDashboard(dash) {
+    const nomesMes = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    const hoje = new Date(dash.hoje + 'T12:00:00');
+    document.getElementById('dash-hoje').textContent = `${hoje.getDate()} de ${nomesMes[hoje.getMonth()]} de ${hoje.getFullYear()}`;
+
+    document.getElementById('kpi-ocupacao-hoje').textContent = `${dash.ocupacaoAtual.length} / ${CABANAS.length}`;
+    document.getElementById('kpi-ocupacao-hoje-sub').textContent = dash.ocupacaoAtual.length
+      ? dash.ocupacaoAtual.map((o) => o.cabana).join(', ')
+      : 'Nenhuma cabana ocupada';
+    document.getElementById('kpi-taxa-ocupacao').textContent = `${dash.taxaOcupacaoMes}%`;
+    document.getElementById('kpi-total-pago').textContent = formatBRL(dash.financeiro.totalPago);
+    document.getElementById('kpi-total-atrasado').textContent = formatBRL(dash.financeiro.totalAtrasado);
+    document.getElementById('kpi-total-pendente').textContent = formatBRL(dash.financeiro.totalPendente);
+    document.getElementById('kpi-total-confirmado').textContent = formatBRL(dash.financeiro.totalConfirmado);
+
+    const ocupacaoEl = document.getElementById('dash-ocupacao-lista');
+    ocupacaoEl.innerHTML = dash.ocupacaoAtual.length
+      ? dash.ocupacaoAtual.map((o) => `<li><span>${o.cabana} — ${o.hospede}</span><span class="d-data">até ${o.checkout}</span></li>`).join('')
+      : '<div class="dash-empty">Nenhum hóspede na pousada hoje.</div>';
+
+    const eventos = [...dash.proximosCheckins, ...dash.proximosCheckouts].sort((a, b) => a.data_iso.localeCompare(b.data_iso));
+    const proximosEl = document.getElementById('dash-proximos-lista');
+    proximosEl.innerHTML = eventos.length
+      ? eventos.map((e) => {
+          const rotulo = e.tipo === 'checkin' ? '→ Check-in' : '← Check-out';
+          const dataFmt = isoParaData(e.data_iso).toLocaleDateString('pt-BR');
+          return `<li><span>${rotulo} · ${e.cabana} — ${e.hospede}</span><span class="d-data">${dataFmt}</span></li>`;
+        }).join('')
+      : '<div class="dash-empty">Nada agendado pros próximos 7 dias.</div>';
+  }
+
+  function formatBRL(n) {
+    return (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
   function nomeHospedeDe(r) {
@@ -428,9 +565,11 @@
     const busca = document.getElementById('f-busca').value;
     const tipo = document.getElementById('f-tipo').value;
     const cabana = document.getElementById('f-cabana').value;
+    const statusPagamento = document.getElementById('f-pagamento').value;
     if (busca) params.set('busca', busca);
     if (tipo) params.set('tipo', tipo);
     if (cabana) params.set('cabana', cabana);
+    if (statusPagamento) params.set('status_pagamento', statusPagamento);
 
     const res = await authFetch('/api/registros?' + params.toString());
     REGISTROS = await res.json();
@@ -445,17 +584,27 @@
 
     REGISTROS.forEach((r) => {
       const tr = document.createElement('tr');
+      const valor = r.tipo === 'reserva' ? (r.dados?.valor_total || '—') : '—';
+      const statusPag = r.tipo === 'reserva' ? badgePagamento(r.dados?.status_pagamento) : '—';
       tr.innerHTML = `
         <td><span class="tag ${r.tipo}">${r.tipo === 'cadastro' ? 'Cadastro' : 'Reserva'}</span></td>
         <td>${nomeHospedeDe(r)}</td>
         <td>${r.dados?.cabana || '—'}</td>
         <td class="mono">${r.dados?.checkin || '—'}</td>
         <td class="mono">${r.dados?.checkout || '—'}</td>
+        <td class="mono">${valor}</td>
+        <td>${statusPag}</td>
         <td class="mono">${r.telefone || '—'}</td>
         <td class="actions"><a onclick="abrirModal('${r.id}')">Editar</a></td>
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  function badgePagamento(status) {
+    if (!status) return '—';
+    const labels = { pago: 'Pago', parcial: 'Parcial', pendente: 'Pendente', atrasado: 'Atrasado' };
+    return `<span class="pag-badge ${status}">${labels[status] || status}</span>`;
   }
 
   function abrirModal(id) {
@@ -467,6 +616,27 @@
     document.getElementById('edit-checkin').value = r.dados?.checkin || '';
     document.getElementById('edit-checkout').value = r.dados?.checkout || '';
     document.getElementById('edit-json').value = JSON.stringify(r.dados, null, 2);
+
+    const wrapper = document.getElementById('edit-parcelas-wrapper');
+    const lista = document.getElementById('edit-parcelas-lista');
+    lista.innerHTML = '';
+    const parcelas = r.tipo === 'reserva' ? (r.dados?.parcelas || []) : [];
+    if (parcelas.length) {
+      wrapper.style.display = 'block';
+      parcelas.forEach((p, i) => {
+        const row = document.createElement('div');
+        row.className = 'parcela-row';
+        row.innerHTML = `
+          <input type="checkbox" id="parcela-paga-${i}" ${p.paga ? 'checked' : ''} />
+          <span class="p-info">Parcela ${i + 1} — vence ${p.data || '—'}</span>
+          <span class="p-valor">${p.valor || '—'}</span>
+        `;
+        lista.appendChild(row);
+      });
+    } else {
+      wrapper.style.display = 'none';
+    }
+
     document.getElementById('modal-backdrop').classList.add('visible');
   }
 
@@ -489,6 +659,13 @@
     dados.checkout = document.getElementById('edit-checkout').value;
     if (dados.hospede1) dados.hospede1.nome = document.getElementById('edit-hospede').value;
     if (!dados.hospede1 && 'hospede' in dados) dados.hospede = document.getElementById('edit-hospede').value;
+
+    if (Array.isArray(dados.parcelas) && dados.parcelas.length) {
+      dados.parcelas = dados.parcelas.map((p, i) => ({
+        ...p,
+        paga: document.getElementById(`parcela-paga-${i}`)?.checked ?? p.paga,
+      }));
+    }
 
     await authFetch('/api/registros/' + EDITANDO_ID, { method: 'PATCH', body: JSON.stringify({ dados }) });
     fecharModal();
@@ -525,6 +702,9 @@
 
     CLIENTES.forEach((c) => {
       const cabanasUnicas = [...new Set(c.estadias.map((e) => e.cabana).filter(Boolean))].join(', ');
+      const totalGasto = c.estadias
+        .filter((e) => e.tipo === 'reserva')
+        .reduce((soma, e) => soma + parseValorBRL(e.valor_total), 0);
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${c.nome || '(sem nome)'}</td>
@@ -532,9 +712,31 @@
         <td>${c.email || '—'}</td>
         <td>${c.estadias.length}</td>
         <td>${cabanasUnicas || '—'}</td>
+        <td class="mono">${totalGasto ? formatBRL(totalGasto) : '—'}</td>
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  // Parser leve de valor BR só pro front (mesma regra do backend financeiro.js)
+  function parseValorBRL(str) {
+    if (!str) return 0;
+    let s = String(str).replace(/[^\d,.-]/g, '');
+    if (!s) return 0;
+    const ultimaVirgula = s.lastIndexOf(',');
+    const ultimoPonto = s.lastIndexOf('.');
+    if (ultimaVirgula > ultimoPonto) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else if (ultimoPonto > ultimaVirgula) {
+      const digitosDepois = s.length - ultimoPonto - 1;
+      if (digitosDepois === 2) {
+        s = s.slice(0, ultimoPonto).replace(/\./g, '') + '.' + s.slice(ultimoPonto + 1);
+      } else {
+        s = s.replace(/\./g, '');
+      }
+    }
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : 0;
   }
 
   function exportarClientes() {
