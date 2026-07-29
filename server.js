@@ -335,10 +335,19 @@ async function notificarResponsavel(texto) {
   }
 }
 
-// Enquanto ANTHROPIC_API_KEY não estiver configurada, o bot funciona só com o
-// menu fixo. Perguntas fora do roteiro recebem essa resposta padrão em vez de
-// travar — útil pra testar a parte de WhatsApp/Instagram antes de ligar a IA.
+// IA_ATIVA controla a EXTRAÇÃO estruturada (cadastro de hóspede, confirmação
+// de reserva) — isso é o que alimenta o CRM e o lembrete de véspera. Fica
+// ligada sempre que ANTHROPIC_API_KEY existir, independente do chat.
 const IA_ATIVA = Boolean(process.env.ANTHROPIC_API_KEY);
+
+// IA_CHAT_ATIVA controla se a Claude PODE conversar livremente com o cliente
+// (perguntas fora do menu fixo). É uma flag separada e opt-in: só liga se
+// ANTHROPIC_API_KEY existir E a variável IA_RESPONDE_CLIENTES estiver "true".
+// Assim dá pra manter a IA ligada só pra extração (CRM/lembretes) sem que ela
+// converse com hóspede nenhum — troque IA_RESPONDE_CLIENTES=true quando
+// quiser habilitar o chat.
+const IA_CHAT_ATIVA = IA_ATIVA && String(process.env.IA_RESPONDE_CLIENTES).toLowerCase() === 'true';
+
 const RESPOSTA_SEM_IA =
   'Recebi sua mensagem! No momento nosso assistente automático só responde as opções do menu — em breve nosso time te retorna com essa resposta. 🙂';
 
@@ -433,10 +442,12 @@ app.post('/webhook/whatsapp', async (req, res) => {
       return;
     }
 
-    // 3) Fora do roteiro fixo: só agora chama a Claude (é o único caso que gera custo de IA)
-    if (!IA_ATIVA) {
+    // 3) Fora do roteiro fixo: só chama a Claude pra conversar se o chat estiver
+    // explicitamente habilitado (IA_CHAT_ATIVA) — extração pro CRM continua
+    // funcionando mesmo com o chat desligado.
+    if (!IA_CHAT_ATIVA) {
       await sendWhatsAppMessage(from, RESPOSTA_SEM_IA);
-      logEscalation('whatsapp', from, `[sem IA configurada] ${text}`);
+      logEscalation('whatsapp', from, `[chat da IA desligado] ${text}`);
       return;
     }
     const { reply, escalate, pdfApelidos } = await askClaude(key, text);
@@ -575,10 +586,12 @@ app.post('/webhook/instagram', async (req, res) => {
       return;
     }
 
-    // 3) Fora do roteiro fixo: só agora chama a Claude
-    if (!IA_ATIVA) {
+    // 3) Fora do roteiro fixo: só chama a Claude pra conversar se o chat estiver
+    // explicitamente habilitado (IA_CHAT_ATIVA) — extração pro CRM continua
+    // funcionando mesmo com o chat desligado.
+    if (!IA_CHAT_ATIVA) {
       await sendInstagramMessage(senderId, RESPOSTA_SEM_IA);
-      logEscalation('instagram', senderId, `[sem IA configurada] ${text}`);
+      logEscalation('instagram', senderId, `[chat da IA desligado] ${text}`);
       return;
     }
     const { reply, escalate, pdfApelidos } = await askClaude(key, text);
