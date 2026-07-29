@@ -34,7 +34,8 @@
       "id": "atendente",
       "title": "🙋 Falar com atendente",
       "aliases": ["atendente", "humano", "pessoa", "falar com alguem", "reservar", "quero reservar", "fechar reserva", "disponibilidade"],
-      "response": "Perfeito! Já vou te conectar com nosso time para seguir com os detalhes. 🙂",
+      "response": "Perfeito! Pra agilizar seu atendimento, me ajuda preenchendo esse cadastro rápido? Assim que enviar, nosso time já vai receber tudo prontinho pra confirmar sua reserva 🙂",
+      "sendForm": true,
       "escalate": true
     }
   ]
