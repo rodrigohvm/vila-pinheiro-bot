@@ -11,6 +11,13 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const cron = require('node-cron');
+const {
+  ensureParcelaDefaults,
+  enrichRegistro,
+  buildDashboard,
+  buildClientes,
+  buildICSFeed,
+} = require('./financeiro');
 
 const app = express();
 app.use(express.json());
@@ -76,6 +83,7 @@ function saveRegistro(registro) {
   try {
     if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
     const registros = loadRegistros();
+    if (registro.tipo === 'reserva') ensureParcelaDefaults(registro.dados);
     const checkin_iso = normalizeDateBR(registro.dados?.checkin);
     const checkout_iso = normalizeDateBR(registro.dados?.checkout);
     const novo = {
@@ -102,6 +110,7 @@ function updateRegistro(id, novosCampos) {
 
   const atual = registros[index];
   const dadosAtualizados = { ...atual.dados, ...(novosCampos.dados || {}) };
+  if (atual.tipo === 'reserva') ensureParcelaDefaults(dadosAtualizados);
   const atualizado = {
     ...atual,
     ...novosCampos,
@@ -277,8 +286,8 @@ async function extrairDadosEstruturados(texto, tipo) {
 {"hospede1": {"nome": "", "email": "", "cpf": "", "nascimento": "", "endereco": "", "celular": "", "redes_sociais": ""}, "hospede2": null ou o mesmo formato do hospede1, "checkin": "", "checkout": "", "cabana": "", "numero_hospedes": "", "data_comemorativa": "", "como_conheceu": ""}
 Se um campo não estiver preenchido, use uma string vazia "".`
       : `Extraia os dados da confirmação de reserva abaixo e devolva SOMENTE um JSON (sem markdown, sem texto extra) no formato:
-{"data_reserva": "", "valor_total": "", "forma_pagamento": "", "parcelas": [{"valor": "", "data": ""}], "hospede": "", "checkin": "", "checkout": "", "cabana": ""}
-Se um campo não existir na mensagem, use uma string vazia "" ou lista vazia [].`;
+{"data_reserva": "", "valor_total": "", "forma_pagamento": "", "parcelas": [{"valor": "", "data": "", "paga": false}], "hospede": "", "checkin": "", "checkout": "", "cabana": ""}
+Se um campo não existir na mensagem, use uma string vazia "" ou lista vazia []. Toda parcela extraída da mensagem começa com "paga": false — o pagamento é confirmado depois, manualmente, pela equipe.`;
 
   const response = await axios.post(
     'https://api.anthropic.com/v1/messages',
@@ -400,8 +409,13 @@ app.post('/webhook/whatsapp', async (req, res) => {
             `📋 Novo cadastro de hóspede recebido!\nHóspede 1: ${dados.hospede1?.nome || '(não informado)'}\nCheck-in: ${dados.checkin} → Check-out: ${dados.checkout}\nCabana: ${dados.cabana}\nTelefone do hóspede: ${from}`
           );
         }
+        await sendWhatsAppMessage(from, 'Recebemos seu cadastro! 🙌 Nosso time já foi avisado e vai confirmar sua reserva em breve.');
+      } else {
+        // Sem IA configurada: não há como extrair/avisar automaticamente.
+        // Registra em /admin/escalations pra ninguém ficar sem resposta.
+        logEscalation('whatsapp', from, `[cadastro recebido - IA desligada, revisar manualmente] ${text}`);
+        await sendWhatsAppMessage(from, 'Recebemos seu cadastro! 🙌 Nosso time vai revisar e confirmar sua reserva em breve.');
       }
-      await sendWhatsAppMessage(from, 'Recebemos seu cadastro! 🙌 Nosso time já foi avisado e vai confirmar sua reserva em breve.');
       return;
     }
 
@@ -654,10 +668,11 @@ app.get('/admin/registros', requireAdminKey, (req, res) => {
 // API DO CRM (usada pelo painel web em /crm)
 // ============================================================================
 
-// Lista registros, com filtros opcionais: ?tipo=cadastro|reserva&cabana=Jasmim&busca=texto
+// Lista registros, com filtros opcionais:
+// ?tipo=cadastro|reserva&cabana=Jasmim&busca=texto&status_pagamento=pago|parcial|pendente|atrasado
 app.get('/api/registros', requireAdminKey, (req, res) => {
   let registros = loadRegistros();
-  const { tipo, cabana, busca } = req.query;
+  const { tipo, cabana, busca, status_pagamento } = req.query;
 
   if (tipo) registros = registros.filter((r) => r.tipo === tipo);
   if (cabana) registros = registros.filter((r) => normalize(r.dados?.cabana || '').includes(normalize(cabana)));
@@ -666,7 +681,35 @@ app.get('/api/registros', requireAdminKey, (req, res) => {
     registros = registros.filter((r) => normalize(JSON.stringify(r.dados || {})).includes(b));
   }
 
-  res.json(registros.slice().reverse());
+  const enriquecidos = registros.map((r) => enrichRegistro(r));
+  const filtrados = status_pagamento
+    ? enriquecidos.filter((r) => r.dados?.status_pagamento === status_pagamento)
+    : enriquecidos;
+
+  res.json(filtrados.slice().reverse());
+});
+
+// Resumo geral pro dashboard: ocupação atual, próximos check-ins/checkouts, financeiro.
+app.get('/api/dashboard', requireAdminKey, (req, res) => {
+  res.json(buildDashboard(loadRegistros(), CABANAS));
+});
+
+// Clientes agregados (cadastro + reserva casada por telefone/nome). ?busca=texto
+app.get('/api/clientes', requireAdminKey, (req, res) => {
+  let clientes = buildClientes(loadRegistros());
+  const { busca } = req.query;
+  if (busca) {
+    const b = normalize(busca);
+    clientes = clientes.filter((c) => normalize(JSON.stringify(c)).includes(b));
+  }
+  res.json(clientes);
+});
+
+// Feed .ics somente leitura (assinatura no Google Agenda/Apple Calendar/Outlook).
+// Autenticado por query param (?key=) porque apps de calendário não enviam headers customizados.
+app.get('/api/calendario.ics', requireAdminKey, (req, res) => {
+  res.set('Content-Type', 'text/calendar; charset=utf-8');
+  res.send(buildICSFeed(loadRegistros()));
 });
 
 // Edita campos de um registro (ex: corrigir uma data ou nome)
@@ -683,7 +726,7 @@ app.delete('/api/registros/:id', requireAdminKey, (req, res) => {
   res.json({ removido: true });
 });
 
-// Lista as cabanas configuradas (nome + cor), usado pro filtro e pra agenda
+// Lista as cabanas configuradas (usado pro filtro, legenda e cores do calendário)
 app.get('/api/cabanas', requireAdminKey, (req, res) => {
   res.json(CABANAS.map((c) => ({ nome: c.nome, cor: c.cor || '#6E7F5C' })));
 });
@@ -691,109 +734,6 @@ app.get('/api/cabanas', requireAdminKey, (req, res) => {
 // Serve o painel web do CRM (arquivo estático em /public/crm.html)
 app.get('/crm', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'crm.html'));
-});
-
-// ----------------------------------------------------------------------------
-// Agrega os registros (cadastros + reservas) por HÓSPEDE, usando telefone como
-// chave principal (e CPF como reforço, pra juntar registros que vieram de
-// telefones diferentes mas são da mesma pessoa). Isso alimenta a aba "Clientes".
-// ----------------------------------------------------------------------------
-function montarListaDeClientes() {
-  const registros = loadRegistros();
-  const clientesPorChave = new Map();
-
-  function chaveDoRegistro(r) {
-    if (r.telefone) return `tel:${r.telefone}`;
-    const cpf = r.dados?.hospede1?.cpf;
-    if (cpf) return `cpf:${normalize(cpf)}`;
-    return `nome:${normalize(r.dados?.hospede1?.nome || r.dados?.hospede || 'desconhecido')}`;
-  }
-
-  registros.forEach((r) => {
-    const chave = chaveDoRegistro(r);
-    if (!clientesPorChave.has(chave)) {
-      clientesPorChave.set(chave, {
-        nome: '',
-        telefone: r.telefone || '',
-        email: '',
-        cpf: '',
-        endereco: '',
-        estadias: [],
-      });
-    }
-    const cliente = clientesPorChave.get(chave);
-
-    if (r.tipo === 'cadastro' && r.dados?.hospede1) {
-      cliente.nome = cliente.nome || r.dados.hospede1.nome || '';
-      cliente.email = cliente.email || r.dados.hospede1.email || '';
-      cliente.cpf = cliente.cpf || r.dados.hospede1.cpf || '';
-      cliente.endereco = cliente.endereco || r.dados.hospede1.endereco || '';
-      cliente.telefone = cliente.telefone || r.telefone || '';
-    }
-    if (r.tipo === 'reserva') {
-      cliente.nome = cliente.nome || r.dados?.hospede || '';
-    }
-
-    cliente.estadias.push({
-      cabana: r.dados?.cabana || '',
-      checkin: r.dados?.checkin || '',
-      checkout: r.dados?.checkout || '',
-      tipo: r.tipo,
-    });
-  });
-
-  return Array.from(clientesPorChave.values());
-}
-
-// Lista os clientes já agregados (um por hóspede, com histórico de estadias)
-app.get('/api/clientes', requireAdminKey, (req, res) => {
-  let clientes = montarListaDeClientes();
-  const { busca } = req.query;
-  if (busca) {
-    const b = normalize(busca);
-    clientes = clientes.filter((c) => normalize(JSON.stringify(c)).includes(b));
-  }
-  res.json(clientes);
-});
-
-// Roda o lembrete de véspera manualmente, na hora — útil pra testar sem
-// esperar até às 10h. Acesse: /admin/testar-lembretes?key=SUA_ADMIN_KEY
-app.get('/admin/testar-lembretes', requireAdminKey, async (req, res) => {
-  await enviarLembretesDeVespera();
-  res.json({ ok: true, mensagem: 'Verificação de lembretes executada. Veja os logs do Railway para o resultado.' });
-});
-
-// ----------------------------------------------------------------------------
-// Feed de calendário (.ics) — permite "assinar" a agenda de ocupação no Google
-// Agenda (Configurações > Adicionar agenda > A partir de URL), no Apple
-// Calendar ou no Outlook. Atualiza automaticamente quando o Google/Apple
-// sincronizam (geralmente a cada poucas horas — não é em tempo real).
-// ----------------------------------------------------------------------------
-function formatarDataICS(iso) {
-  return iso.replace(/-/g, '');
-}
-
-app.get('/api/calendario.ics', requireAdminKey, (req, res) => {
-  const registros = loadRegistros().filter((r) => r.checkin_iso && r.checkout_iso);
-
-  const eventos = registros.map((r) => {
-    const nomeHospede = r.dados?.hospede1?.nome || r.dados?.hospede || 'Hóspede';
-    const telefone = r.telefone || '';
-    return [
-      'BEGIN:VEVENT',
-      `UID:${r.id}@vilapinheiro`,
-      `DTSTART;VALUE=DATE:${formatarDataICS(r.checkin_iso)}`,
-      `DTEND;VALUE=DATE:${formatarDataICS(r.checkout_iso)}`,
-      `SUMMARY:${r.dados?.cabana || 'Cabana'} — ${nomeHospede}`,
-      `DESCRIPTION:Telefone: ${telefone}`,
-      'END:VEVENT',
-    ].join('\r\n');
-  });
-
-  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vila Pinheiro//Ocupacao//PT', ...eventos, 'END:VCALENDAR'].join('\r\n');
-
-  res.set('Content-Type', 'text/calendar; charset=utf-8');
-  res.send(ics);
 });
 
 // Checagem simples de que o servidor está de pé

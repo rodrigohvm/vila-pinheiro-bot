@@ -1,31 +1,17 @@
 {
-  "_comentario": "Uma entrada por cabana. 'nome' precisa bater com o texto usado nos cadastros/reservas. 'cor' é usada pra colorir a barra dessa cabana no calendário — pode trocar à vontade (formato hexadecimal).",
+  "_comentario": "Uma entrada por cabana. 'nome' precisa bater exatamente com o que aparece no campo 'cabana' dos cadastros/reservas (ex: o mesmo texto que a Claude extrai do formulário). 'cor' é usada na legenda e nas barras do calendário do CRM (hex). Preencha os dados reais de cada cabana e adicione as demais (ex: Ipê, Floresta) seguindo o mesmo formato.",
 
   "cabanas": [
     {
-      "nome": "Ipê",
-      "cor": "#A6325A",
-      "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
-      "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
-      "recomendacoes": "[EDITE: dicas específicas dessa cabana]"
-    },
-    {
       "nome": "Jasmim",
-      "cor": "#3B5BA6",
+      "cor": "#C97C55",
       "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
       "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
-      "recomendacoes": "[EDITE: dicas específicas dessa cabana]"
-    },
-    {
-      "nome": "Floresta",
-      "cor": "#C9971F",
-      "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
-      "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
-      "recomendacoes": "[EDITE: dicas específicas dessa cabana]"
+      "recomendacoes": "[EDITE: dicas específicas dessa cabana - trilha próxima, melhor horário pro café da manhã, etc.]"
     },
     {
       "nome": "Manacá",
-      "cor": "#C9704F",
+      "cor": "#6E7F5C",
       "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
       "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
       "recomendacoes": "[EDITE: dicas específicas dessa cabana]"
