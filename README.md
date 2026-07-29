@@ -8,6 +8,101 @@ humano (você) precisa entrar na conversa.
 
 ---
 
+## Painel CRM (web)
+
+Acesse pelo navegador (computador ou celular):
+`https://SEU-ENDERECO-RAILWAY.up.railway.app/crm`
+
+Na primeira vez, ele pede uma **chave de acesso** — use o mesmo valor do seu `ADMIN_KEY`.
+Depois disso, fica salvo no navegador e não pede de novo.
+
+### Aba "Reservas"
+- Lista todos os cadastros de hóspede e confirmações de reserva.
+- Filtros por tipo, por cabana, e busca livre (nome, telefone, etc.).
+- Clique em **"Editar"** pra corrigir qualquer campo (nome, cabana, datas) — os
+  campos mais comuns têm um formulário simples; clicando em "Ver todos os dados
+  (avançado)" você edita o registro inteiro em JSON, se precisar de algo fora
+  do formulário básico.
+- **Excluir** remove o registro permanentemente.
+
+### Aba "Agenda"
+Mostra uma linha do tempo de 30 dias por cabana, com barras coloridas nos
+períodos ocupados (calculadas a partir das datas de check-in/check-out de cada
+registro). Passe o mouse sobre uma barra pra ver o nome do hóspede.
+
+Pra uma cabana aparecer na agenda, ela precisa estar cadastrada no arquivo
+`cabanas.json` (veja a próxima seção).
+
+## Cabanas, códigos de acesso e lembrete automático de véspera
+
+Edite o arquivo `cabanas.json` com os dados reais de cada cabana:
+```json
+{
+  "cabanas": [
+    {
+      "nome": "Jasmim",
+      "codigo_acesso": "1234#",
+      "senha_wifi": "vilapinheiro2026",
+      "recomendacoes": "A trilha da cachoeira fica a 5 min a pé. O café da manhã é servido das 7h às 10h na varanda principal."
+    }
+  ]
+}
+```
+- `"nome"` precisa bater com o nome da cabana usado nos cadastros/reservas
+  (é o mesmo texto que a Claude extrai do formulário/confirmação).
+- Esses dados também aparecem na aba "Agenda" do painel.
+
+**Todo dia às 10h (horário de Brasília)**, o sistema verifica automaticamente
+quem faz check-in **no dia seguinte** e manda uma mensagem personalizada pro
+WhatsApp do hóspede, com o nome dele, o código de acesso, a senha do wifi e as
+recomendações daquela cabana específica. Isso só funciona pra hóspedes que
+passaram pelo formulário de cadastro (onde capturamos o telefone) — reservas
+registradas só pela confirmação interna da equipe não recebem esse lembrete
+automaticamente, pois não têm o telefone do hóspede vinculado.
+
+## Funil de vendas + CRM leve (cadastro de hóspede e registro de reservas)
+
+Quando o cliente demonstra interesse em reservar (clica em "Falar com atendente"
+ou escreve algo do tipo "quero reservar"), o bot agora:
+
+1. Manda uma mensagem acolhedora.
+2. **Envia automaticamente o formulário de cadastro** (arquivo `formulario-cadastro.txt`).
+3. Quando o hóspede **responde** esse formulário preenchido, a Claude lê a resposta
+   e extrai os dados automaticamente (nome, CPF, datas, cabana, etc.).
+4. Esses dados são salvos em `data/registros.json` e um **aviso real por WhatsApp**
+   é enviado pro número configurado em `OWNER_WHATSAPP_NUMBER` — a pessoa que fecha
+   as reservas já recebe tudo organizado, sem precisar copiar/colar nada.
+
+Além disso, sua equipe pode colar a mensagem interna de confirmação de reserva
+(aquela com "HOSPEDARIA VILA PINHEIRO... Pix... 1ª parcela...") diretamente pro
+número do bot — só funciona se o número de quem manda estiver na lista
+`STAFF_NUMBERS` do `.env`. O bot extrai os dados financeiros (valor, forma de
+pagamento, parcelas, cabana, datas) e salva no mesmo registro.
+
+### Ver os registros salvos
+Acesse no navegador:
+`https://SEU-ENDERECO-RAILWAY.up.railway.app/admin/registros?key=SUA_ADMIN_KEY`
+
+### ⚠️ Importante sobre persistência de dados
+Por padrão, o Railway **não garante que a pasta `data/` sobreviva** a um
+reinício ou a um novo deploy — é um sistema de arquivos "efêmero". Como esses
+registros contêm dados sensíveis de hóspedes (CPF, endereço, etc.), o ideal é:
+
+1. No painel do Railway, vá em **Settings → Volumes** → **"New Volume"**.
+2. Defina o **Mount Path** como `/app/data` (ou o mesmo caminho da variável `DATA_DIR`, se você mudou).
+3. Isso cria um disco persistente — os dados passam a sobreviver a reinícios e deploys.
+
+Sem isso, os dados do CRM (aba Reservas, Agenda, e a lista de quem recebeu
+lembrete) podem ser perdidos no próximo deploy — vale configurar o Volume
+antes de usar isso com clientes reais.
+
+### ⚠️ Importante sobre segurança e dados sensíveis
+Esses registros guardam CPF, endereço e outros dados pessoais dos hóspedes.
+- Nunca compartilhe a URL do `/admin/registros` com mais gente do que precisa.
+- Escolha um `ADMIN_KEY` difícil de adivinhar (não use "123456" nem "teste").
+- Se algum dia quiser desligar esse recurso, é só remover as chamadas relacionadas
+  no `server.js` (posso te ajudar nisso quando quiser).
+
 ## Testando em 2 etapas (recomendado)
 
 Você pode validar tudo em duas fases, sem precisar da IA logo de cara:

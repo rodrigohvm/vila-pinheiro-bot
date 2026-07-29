@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vila Pinheiro — Painel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1E2A20;
+    --paper: #EFE7D3;
+    --paper-raised: #F8F3E6;
+    --line: #D8CDAF;
+    --clay: #A6522F;
+    --clay-soft: #C97C55;
+    --moss: #6E7F5C;
+    --moss-soft: #9DAE8B;
+    --moss-pale: #E3E8DA;
+    --muted: #7A7266;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Work Sans', sans-serif;
+    font-size: 14px;
+  }
+  h1, h2, h3, .brand { font-family: 'Fraunces', serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ---------- Login gate ---------- */
+  #login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #login-screen .brand { font-size: 28px; font-weight: 600; color: var(--clay); }
+  #login-screen p { color: var(--muted); margin: 0 0 8px; }
+  #login-screen input {
+    font-family: 'JetBrains Mono', monospace;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-raised);
+    width: 260px;
+    font-size: 14px;
+  }
+  #login-screen button, .btn {
+    background: var(--clay);
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: 'Work Sans', sans-serif;
+    font-size: 14px;
+  }
+  #login-screen button:hover, .btn:hover { background: var(--clay-soft); }
+  #login-error { color: var(--clay); font-size: 13px; min-height: 18px; }
+
+  /* ---------- App shell ---------- */
+  #app { display: none; min-height: 100vh; }
+  #app.visible { display: flex; }
+
+  aside {
+    width: 200px;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 28px 20px;
+    flex-shrink: 0;
+  }
+  aside .brand { font-size: 20px; color: var(--paper); margin-bottom: 2px; }
+  aside .subtitle { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--moss-soft); margin-bottom: 32px; }
+  aside nav a {
+    display: block;
+    color: var(--paper);
+    opacity: 0.7;
+    text-decoration: none;
+    padding: 10px 0;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    cursor: pointer;
+  }
+  aside nav a.active, aside nav a:hover { opacity: 1; color: var(--clay-soft); }
+
+  main { flex: 1; padding: 32px 40px; overflow-x: auto; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .view-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 24px; }
+  .view-header h2 { margin: 0; font-size: 24px; font-weight: 600; }
+  .view-header .count { color: var(--muted); font-size: 13px; }
+
+  /* ---------- Filtros ---------- */
+  .filters { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+  .filters input, .filters select {
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper-raised);
+    font-family: 'Work Sans', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .filters input[type="text"] { min-width: 220px; }
+
+  /* ---------- Tabela ---------- */
+  table { width: 100%; border-collapse: collapse; background: var(--paper-raised); border-radius: 8px; overflow: hidden; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--moss-pale); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+  .tag.cadastro { background: var(--moss-pale); color: var(--moss); }
+  .tag.reserva { background: #F3E2D6; color: var(--clay); }
+  .actions a { color: var(--clay); cursor: pointer; font-size: 12px; margin-right: 10px; text-decoration: none; }
+  .actions a:hover { text-decoration: underline; }
+  .empty-state { padding: 60px 20px; text-align: center; color: var(--muted); }
+
+  /* ---------- Modal de edição ---------- */
+  #modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(30,42,32,0.45);
+    align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  #modal-backdrop.visible { display: flex; }
+  #modal {
+    background: var(--paper-raised);
+    border-radius: 10px;
+    padding: 28px;
+    width: 460px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  #modal h3 { margin: 0 0 18px; }
+  #modal label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  #modal input, #modal textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-family: 'Work Sans', sans-serif;
+    font-size: 13px;
+  }
+  #modal textarea { font-family: 'JetBrains Mono', monospace; font-size: 12px; min-height: 120px; }
+  #modal .modal-actions { display: flex; justify-content: space-between; margin-top: 22px; }
+  #modal .modal-actions .btn-secondary {
+    background: none; border: 1px solid var(--line); color: var(--ink);
+    padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  details { margin-top: 14px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+
+  /* ---------- Agenda / ocupação ---------- */
+  .agenda-wrap { overflow-x: auto; background: var(--paper-raised); border-radius: 8px; padding: 20px; }
+  .agenda-row { display: flex; align-items: center; margin-bottom: 6px; }
+  .agenda-label { width: 110px; flex-shrink: 0; font-weight: 500; font-size: 13px; }
+  .agenda-track { display: flex; position: relative; }
+  .agenda-cell {
+    width: 26px; height: 34px; flex-shrink: 0;
+    border-right: 1px solid var(--paper);
+    position: relative;
+  }
+  .agenda-cell.weekend { background: rgba(0,0,0,0.03); }
+  .agenda-cell .bar {
+    position: absolute; top: 4px; bottom: 4px; left: 0; right: 0;
+    background: var(--moss-soft);
+    border-radius: 3px;
+  }
+  .agenda-cell .bar.start { left: 3px; border-radius: 6px 3px 3px 6px; }
+  .agenda-cell .bar.end { right: 3px; border-radius: 3px 6px 6px 3px; }
+  .agenda-header { display: flex; margin-left: 110px; margin-bottom: 8px; }
+  .agenda-header .day {
+    width: 26px; flex-shrink: 0; text-align: center;
+    font-size: 10px; color: var(--muted);
+  }
+  .agenda-tooltip {
+    position: absolute; bottom: 40px; left: 0;
+    background: var(--ink); color: var(--paper);
+    padding: 6px 10px; border-radius: 6px; font-size: 11px;
+    white-space: nowrap; display: none; z-index: 10;
+  }
+  .agenda-cell:hover .agenda-tooltip { display: block; }
+  .legend { display: flex; gap: 16px; margin-top: 18px; font-size: 12px; color: var(--muted); align-items: center; }
+  .legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; background: var(--moss-soft); }
+</style>
+</head>
+<body>
+
+  <div id="login-screen">
+    <div class="brand">Vila Pinheiro</div>
+    <p>Painel interno — informe a chave de acesso</p>
+    <input type="password" id="login-key" placeholder="Chave de acesso" />
+    <button onclick="fazerLogin()">Entrar</button>
+    <div id="login-error"></div>
+  </div>
+
+  <div id="app">
+    <aside>
+      <div class="brand">Vila Pinheiro</div>
+      <div class="subtitle">Painel interno</div>
+      <nav>
+        <a data-view="reservas" class="active" onclick="mudarView('reservas')">Reservas</a>
+        <a data-view="agenda" onclick="mudarView('agenda')">Agenda</a>
+      </nav>
+    </aside>
+
+    <main>
+      <!-- ===================== VIEW: RESERVAS ===================== -->
+      <section id="view-reservas" class="view active">
+        <div class="view-header">
+          <h2>Reservas</h2>
+          <span class="count" id="count-reservas"></span>
+        </div>
+        <div class="filters">
+          <input type="text" id="f-busca" placeholder="Buscar por nome, telefone..." oninput="carregarRegistros()" />
+          <select id="f-tipo" onchange="carregarRegistros()">
+            <option value="">Todos os tipos</option>
+            <option value="cadastro">Cadastro de hóspede</option>
+            <option value="reserva">Confirmação de reserva</option>
+          </select>
+          <select id="f-cabana" onchange="carregarRegistros()">
+            <option value="">Todas as cabanas</option>
+          </select>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Tipo</th><th>Hóspede</th><th>Cabana</th><th>Check-in</th><th>Check-out</th><th>Telefone</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="tabela-registros"></tbody>
+        </table>
+        <div id="reservas-empty" class="empty-state" style="display:none;">Nenhum registro encontrado ainda. Eles aparecem aqui automaticamente conforme os hóspedes preenchem o cadastro pelo WhatsApp.</div>
+      </section>
+
+      <!-- ===================== VIEW: AGENDA ===================== -->
+      <section id="view-agenda" class="view">
+        <div class="view-header">
+          <h2>Agenda de ocupação</h2>
+          <span class="count">Próximos 30 dias</span>
+        </div>
+        <div class="agenda-wrap">
+          <div class="agenda-header" id="agenda-header"></div>
+          <div id="agenda-rows"></div>
+        </div>
+        <div class="legend"><span class="swatch"></span> Cabana ocupada</div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===================== MODAL DE EDIÇÃO ===================== -->
+  <div id="modal-backdrop">
+    <div id="modal">
+      <h3>Editar registro</h3>
+      <label>Hóspede</label>
+      <input id="edit-hospede" type="text" />
+      <label>Cabana</label>
+      <input id="edit-cabana" type="text" />
+      <label>Check-in (dd/mm/aa)</label>
+      <input id="edit-checkin" type="text" />
+      <label>Check-out (dd/mm/aa)</label>
+      <input id="edit-checkout" type="text" />
+      <details>
+        <summary>Ver todos os dados (avançado)</summary>
+        <label>JSON completo</label>
+        <textarea id="edit-json"></textarea>
+      </details>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="fecharModal()">Cancelar</button>
+        <div>
+          <a onclick="excluirRegistro()" style="color:var(--clay); margin-right:16px; cursor:pointer; font-size:13px;">Excluir</a>
+          <button class="btn" onclick="salvarEdicao()">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  let CHAVE = localStorage.getItem('vp_admin_key') || '';
+  let REGISTROS = [];
+  let CABANAS = [];
+  let EDITANDO_ID = null;
+
+  function fazerLogin() {
+    const valor = document.getElementById('login-key').value.trim();
+    if (!valor) return;
+    CHAVE = valor;
+    localStorage.setItem('vp_admin_key', valor);
+    iniciar();
+  }
+
+  async function authFetch(url, opts = {}) {
+    opts.headers = { ...(opts.headers || {}), 'x-admin-key': CHAVE, 'content-type': 'application/json' };
+    const res = await fetch(url, opts);
+    if (res.status === 403) throw new Error('chave-invalida');
+    return res;
+  }
+
+  async function iniciar() {
+    try {
+      const resCabanas = await authFetch('/api/cabanas');
+      CABANAS = await resCabanas.json();
+    } catch (err) {
+      document.getElementById('login-error').textContent = 'Chave inválida. Confira e tente de novo.';
+      return;
+    }
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    preencherFiltroCabanas();
+    carregarRegistros();
+    montarAgenda();
+  }
+
+  function preencherFiltroCabanas() {
+    const select = document.getElementById('f-cabana');
+    CABANAS.forEach((nome) => {
+      const opt = document.createElement('option');
+      opt.value = nome; opt.textContent = nome;
+      select.appendChild(opt);
+    });
+  }
+
+  function mudarView(nome) {
+    document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
+    document.getElementById('view-' + nome).classList.add('active');
+    document.querySelectorAll('nav a').forEach((a) => a.classList.remove('active'));
+    document.querySelector(`nav a[data-view="${nome}"]`).classList.add('active');
+    if (nome === 'agenda') montarAgenda();
+  }
+
+  function nomeHospedeDe(r) {
+    if (r.tipo === 'cadastro') return r.dados?.hospede1?.nome || '(sem nome)';
+    return r.dados?.hospede || '(sem nome)';
+  }
+
+  async function carregarRegistros() {
+    const params = new URLSearchParams();
+    const busca = document.getElementById('f-busca').value;
+    const tipo = document.getElementById('f-tipo').value;
+    const cabana = document.getElementById('f-cabana').value;
+    if (busca) params.set('busca', busca);
+    if (tipo) params.set('tipo', tipo);
+    if (cabana) params.set('cabana', cabana);
+
+    const res = await authFetch('/api/registros?' + params.toString());
+    REGISTROS = await res.json();
+    renderizarTabela();
+  }
+
+  function renderizarTabela() {
+    const tbody = document.getElementById('tabela-registros');
+    tbody.innerHTML = '';
+    document.getElementById('count-reservas').textContent = REGISTROS.length + ' registro(s)';
+    document.getElementById('reservas-empty').style.display = REGISTROS.length ? 'none' : 'block';
+
+    REGISTROS.forEach((r) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="tag ${r.tipo}">${r.tipo === 'cadastro' ? 'Cadastro' : 'Reserva'}</span></td>
+        <td>${nomeHospedeDe(r)}</td>
+        <td>${r.dados?.cabana || '—'}</td>
+        <td class="mono">${r.dados?.checkin || '—'}</td>
+        <td class="mono">${r.dados?.checkout || '—'}</td>
+        <td class="mono">${r.telefone || '—'}</td>
+        <td class="actions"><a onclick="abrirModal('${r.id}')">Editar</a></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function abrirModal(id) {
+    const r = REGISTROS.find((x) => x.id === id);
+    if (!r) return;
+    EDITANDO_ID = id;
+    document.getElementById('edit-hospede').value = nomeHospedeDe(r);
+    document.getElementById('edit-cabana').value = r.dados?.cabana || '';
+    document.getElementById('edit-checkin').value = r.dados?.checkin || '';
+    document.getElementById('edit-checkout').value = r.dados?.checkout || '';
+    document.getElementById('edit-json').value = JSON.stringify(r.dados, null, 2);
+    document.getElementById('modal-backdrop').classList.add('visible');
+  }
+
+  function fecharModal() {
+    document.getElementById('modal-backdrop').classList.remove('visible');
+    EDITANDO_ID = null;
+  }
+
+  async function salvarEdicao() {
+    if (!EDITANDO_ID) return;
+    let dados;
+    try {
+      dados = JSON.parse(document.getElementById('edit-json').value);
+    } catch (err) {
+      alert('O JSON avançado está com um erro de formatação. Corrija ou feche os "detalhes avançados" e edite só os campos simples.');
+      return;
+    }
+    dados.cabana = document.getElementById('edit-cabana').value;
+    dados.checkin = document.getElementById('edit-checkin').value;
+    dados.checkout = document.getElementById('edit-checkout').value;
+    if (dados.hospede1) dados.hospede1.nome = document.getElementById('edit-hospede').value;
+    if (!dados.hospede1 && 'hospede' in dados) dados.hospede = document.getElementById('edit-hospede').value;
+
+    await authFetch('/api/registros/' + EDITANDO_ID, { method: 'PATCH', body: JSON.stringify({ dados }) });
+    fecharModal();
+    carregarRegistros();
+  }
+
+  async function excluirRegistro() {
+    if (!EDITANDO_ID) return;
+    if (!confirm('Excluir esse registro permanentemente?')) return;
+    await authFetch('/api/registros/' + EDITANDO_ID, { method: 'DELETE' });
+    fecharModal();
+    carregarRegistros();
+  }
+
+  // ---------------- Agenda de ocupação ----------------
+  function isoParaData(iso) {
+    const [ano, mes, dia] = iso.split('-').map(Number);
+    return new Date(ano, mes - 1, dia);
+  }
+
+  async function montarAgenda() {
+    const res = await authFetch('/api/registros');
+    const todos = await res.json();
+    const dias = 30;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const header = document.getElementById('agenda-header');
+    header.innerHTML = '';
+    for (let i = 0; i < dias; i++) {
+      const d = new Date(hoje);
+      d.setDate(d.getDate() + i);
+      const div = document.createElement('div');
+      div.className = 'day';
+      div.textContent = d.getDate();
+      header.appendChild(div);
+    }
+
+    const rowsEl = document.getElementById('agenda-rows');
+    rowsEl.innerHTML = '';
+
+    CABANAS.forEach((nomeCabana) => {
+      const reservasDaCabana = todos.filter(
+        (r) => r.checkin_iso && r.checkout_iso && (r.dados?.cabana || '').toLowerCase().includes(nomeCabana.toLowerCase())
+      );
+
+      const row = document.createElement('div');
+      row.className = 'agenda-row';
+      const label = document.createElement('div');
+      label.className = 'agenda-label';
+      label.textContent = nomeCabana;
+      row.appendChild(label);
+
+      const track = document.createElement('div');
+      track.className = 'agenda-track';
+
+      for (let i = 0; i < dias; i++) {
+        const d = new Date(hoje);
+        d.setDate(d.getDate() + i);
+        const cell = document.createElement('div');
+        cell.className = 'agenda-cell' + ([0, 6].includes(d.getDay()) ? ' weekend' : '');
+
+        const ocupacao = reservasDaCabana.find((r) => {
+          const checkin = isoParaData(r.checkin_iso);
+          const checkout = isoParaData(r.checkout_iso);
+          return d >= checkin && d < checkout;
+        });
+
+        if (ocupacao) {
+          const bar = document.createElement('div');
+          const checkin = isoParaData(ocupacao.checkin_iso);
+          const checkout = isoParaData(ocupacao.checkout_iso);
+          bar.className = 'bar';
+          if (d.getTime() === checkin.getTime()) bar.className += ' start';
+          const ultimoDia = new Date(checkout); ultimoDia.setDate(ultimoDia.getDate() - 1);
+          if (d.getTime() === ultimoDia.getTime()) bar.className += ' end';
+
+          const tooltip = document.createElement('div');
+          tooltip.className = 'agenda-tooltip';
+          tooltip.textContent = nomeHospedeDe(ocupacao);
+          bar.appendChild(tooltip);
+          cell.appendChild(bar);
+        }
+        track.appendChild(cell);
+      }
+      row.appendChild(track);
+      rowsEl.appendChild(row);
+    });
+  }
+
+  if (CHAVE) iniciar();
+</script>
+</body>
+</html>

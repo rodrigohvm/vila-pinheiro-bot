@@ -1,0 +1,18 @@
+{
+  "_comentario": "Uma entrada por cabana. 'nome' precisa bater exatamente com o que aparece no campo 'cabana' dos cadastros/reservas (ex: o mesmo texto que a Claude extrai do formulário). Preencha os dados reais de cada cabana.",
+
+  "cabanas": [
+    {
+      "nome": "Jasmim",
+      "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
+      "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
+      "recomendacoes": "[EDITE: dicas específicas dessa cabana - trilha próxima, melhor horário pro café da manhã, etc.]"
+    },
+    {
+      "nome": "Manacá",
+      "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
+      "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
+      "recomendacoes": "[EDITE: dicas específicas dessa cabana]"
+    }
+  ]
+}
