@@ -6,6 +6,7 @@
 <title>Vila Pinheiro — Painel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     --ink: #1E2A20;
@@ -93,9 +94,15 @@
   .view { display: none; }
   .view.active { display: block; }
 
-  .view-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 24px; }
+  .view-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 24px; flex-wrap: wrap; gap: 10px; }
   .view-header h2 { margin: 0; font-size: 24px; font-weight: 600; }
   .view-header .count { color: var(--muted); font-size: 13px; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+  .btn-outline {
+    background: none; border: 1px solid var(--line); color: var(--ink);
+    padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; font-family: 'Work Sans', sans-serif;
+  }
+  .btn-outline:hover { background: var(--moss-pale); }
 
   /* ---------- Filtros ---------- */
   .filters { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -167,38 +174,44 @@
   details { margin-top: 14px; }
   details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 
-  /* ---------- Agenda / ocupação ---------- */
-  .agenda-wrap { overflow-x: auto; background: var(--paper-raised); border-radius: 8px; padding: 20px; }
-  .agenda-row { display: flex; align-items: center; margin-bottom: 6px; }
-  .agenda-label { width: 110px; flex-shrink: 0; font-weight: 500; font-size: 13px; }
-  .agenda-track { display: flex; position: relative; }
-  .agenda-cell {
-    width: 26px; height: 34px; flex-shrink: 0;
-    border-right: 1px solid var(--paper);
-    position: relative;
+  /* ---------- Calendário mensal ---------- */
+  .cal-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .cal-toolbar button {
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 6px;
+    width: 32px; height: 32px; cursor: pointer; font-size: 14px; color: var(--ink);
   }
-  .agenda-cell.weekend { background: rgba(0,0,0,0.03); }
-  .agenda-cell .bar {
-    position: absolute; top: 4px; bottom: 4px; left: 0; right: 0;
-    background: var(--moss-soft);
-    border-radius: 3px;
+  .cal-toolbar .hoje-btn { width: auto; padding: 0 14px; }
+  .cal-toolbar .mes-label { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 600; text-transform: capitalize; }
+
+  .cal-grid { background: var(--paper-raised); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--line); }
+  .cal-weekdays div { padding: 8px; text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .cal-week { position: relative; border-bottom: 1px solid var(--line); }
+  .cal-week:last-child { border-bottom: none; }
+  .cal-daynums { display: grid; grid-template-columns: repeat(7, 1fr); }
+  .cal-daynums div { padding: 6px 8px 2px; font-size: 12px; color: var(--ink); }
+  .cal-daynums div.fora-do-mes { color: var(--line); }
+  .cal-bars { position: relative; padding-bottom: 6px; }
+  .cal-bar {
+    position: absolute;
+    height: 20px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #fff;
+    padding: 2px 6px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    cursor: default;
   }
-  .agenda-cell .bar.start { left: 3px; border-radius: 6px 3px 3px 6px; }
-  .agenda-cell .bar.end { right: 3px; border-radius: 3px 6px 6px 3px; }
-  .agenda-header { display: flex; margin-left: 110px; margin-bottom: 8px; }
-  .agenda-header .day {
-    width: 26px; flex-shrink: 0; text-align: center;
-    font-size: 10px; color: var(--muted);
+
+  .legend { display: flex; gap: 16px; margin-top: 18px; font-size: 12px; color: var(--muted); align-items: center; flex-wrap: wrap; }
+  .legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; }
+  .ics-box {
+    margin-top: 18px; padding: 14px 16px; background: var(--moss-pale); border-radius: 8px;
+    font-size: 12px; color: var(--ink); display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
-  .agenda-tooltip {
-    position: absolute; bottom: 40px; left: 0;
-    background: var(--ink); color: var(--paper);
-    padding: 6px 10px; border-radius: 6px; font-size: 11px;
-    white-space: nowrap; display: none; z-index: 10;
-  }
-  .agenda-cell:hover .agenda-tooltip { display: block; }
-  .legend { display: flex; gap: 16px; margin-top: 18px; font-size: 12px; color: var(--muted); align-items: center; }
-  .legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; background: var(--moss-soft); }
+  .ics-box input { flex: 1; min-width: 220px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -217,7 +230,8 @@
       <div class="subtitle">Painel interno</div>
       <nav>
         <a data-view="reservas" class="active" onclick="mudarView('reservas')">Reservas</a>
-        <a data-view="agenda" onclick="mudarView('agenda')">Agenda</a>
+        <a data-view="clientes" onclick="mudarView('clientes')">Clientes</a>
+        <a data-view="calendario" onclick="mudarView('calendario')">Calendário</a>
       </nav>
     </aside>
 
@@ -250,17 +264,53 @@
         <div id="reservas-empty" class="empty-state" style="display:none;">Nenhum registro encontrado ainda. Eles aparecem aqui automaticamente conforme os hóspedes preenchem o cadastro pelo WhatsApp.</div>
       </section>
 
-      <!-- ===================== VIEW: AGENDA ===================== -->
-      <section id="view-agenda" class="view">
+      <!-- ===================== VIEW: CLIENTES ===================== -->
+      <section id="view-clientes" class="view">
         <div class="view-header">
-          <h2>Agenda de ocupação</h2>
-          <span class="count">Próximos 30 dias</span>
+          <h2>Clientes</h2>
+          <div class="header-actions">
+            <span class="count" id="count-clientes"></span>
+            <button class="btn-outline" onclick="exportarClientes()">⬇ Exportar (.xlsx)</button>
+          </div>
         </div>
-        <div class="agenda-wrap">
-          <div class="agenda-header" id="agenda-header"></div>
-          <div id="agenda-rows"></div>
+        <div class="filters">
+          <input type="text" id="c-busca" placeholder="Buscar por nome, telefone, email..." oninput="carregarClientes()" />
         </div>
-        <div class="legend"><span class="swatch"></span> Cabana ocupada</div>
+        <table>
+          <thead>
+            <tr><th>Nome</th><th>Telefone</th><th>Email</th><th>Estadias</th><th>Cabanas já ocupadas</th></tr>
+          </thead>
+          <tbody id="tabela-clientes"></tbody>
+        </table>
+        <div id="clientes-empty" class="empty-state" style="display:none;">Nenhum cliente cadastrado ainda.</div>
+        <p style="color:var(--muted); font-size:12px; margin-top:14px;">
+          Esse arquivo .xlsx abre direto no Excel. Pra usar no Google Planilhas, abra o Google Planilhas → Arquivo → Importar → Fazer upload, e selecione o arquivo baixado.
+        </p>
+      </section>
+
+      <!-- ===================== VIEW: CALENDÁRIO ===================== -->
+      <section id="view-calendario" class="view">
+        <div class="view-header">
+          <h2>Calendário de ocupação</h2>
+        </div>
+        <div class="cal-toolbar">
+          <button onclick="mudarMes(-1)">‹</button>
+          <button class="hoje-btn" onclick="irParaHoje()">Hoje</button>
+          <button onclick="mudarMes(1)">›</button>
+          <div class="mes-label" id="cal-mes-label"></div>
+        </div>
+        <div class="cal-grid">
+          <div class="cal-weekdays">
+            <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+          </div>
+          <div id="cal-semanas"></div>
+        </div>
+        <div class="legend" id="cal-legenda"></div>
+        <div class="ics-box">
+          📅 Assinar essa agenda no Google Agenda / Apple Calendar / Outlook (atualiza sozinho, sem precisar entrar aqui):
+          <input type="text" id="ics-link" readonly onclick="this.select()" />
+          <button class="btn-outline" onclick="copiarLinkICS()">Copiar link</button>
+        </div>
       </section>
     </main>
   </div>
@@ -295,8 +345,11 @@
 <script>
   let CHAVE = localStorage.getItem('vp_admin_key') || '';
   let REGISTROS = [];
-  let CABANAS = [];
+  let CLIENTES = [];
+  let CABANAS = []; // [{nome, cor}]
   let EDITANDO_ID = null;
+  let MES_ATUAL = new Date().getMonth();
+  let ANO_ATUAL = new Date().getFullYear();
 
   function fazerLogin() {
     const valor = document.getElementById('login-key').value.trim();
@@ -325,15 +378,28 @@
     document.getElementById('app').classList.add('visible');
     preencherFiltroCabanas();
     carregarRegistros();
-    montarAgenda();
+    carregarClientes();
+    montarLegenda();
+    document.getElementById('ics-link').value = `${location.origin}/api/calendario.ics?key=${encodeURIComponent(CHAVE)}`;
+    renderizarCalendario();
   }
 
   function preencherFiltroCabanas() {
     const select = document.getElementById('f-cabana');
-    CABANAS.forEach((nome) => {
+    CABANAS.forEach((c) => {
       const opt = document.createElement('option');
-      opt.value = nome; opt.textContent = nome;
+      opt.value = c.nome; opt.textContent = c.nome;
       select.appendChild(opt);
+    });
+  }
+
+  function montarLegenda() {
+    const el = document.getElementById('cal-legenda');
+    el.innerHTML = '';
+    CABANAS.forEach((c) => {
+      const span = document.createElement('span');
+      span.innerHTML = `<span class="swatch" style="background:${c.cor}"></span>${c.nome}`;
+      el.appendChild(span);
     });
   }
 
@@ -342,7 +408,7 @@
     document.getElementById('view-' + nome).classList.add('active');
     document.querySelectorAll('nav a').forEach((a) => a.classList.remove('active'));
     document.querySelector(`nav a[data-view="${nome}"]`).classList.add('active');
-    if (nome === 'agenda') montarAgenda();
+    if (nome === 'calendario') renderizarCalendario();
   }
 
   function nomeHospedeDe(r) {
@@ -350,6 +416,13 @@
     return r.dados?.hospede || '(sem nome)';
   }
 
+  function copiarLinkICS() {
+    const input = document.getElementById('ics-link');
+    input.select();
+    navigator.clipboard?.writeText(input.value);
+  }
+
+  // ---------------- Reservas ----------------
   async function carregarRegistros() {
     const params = new URLSearchParams();
     const busca = document.getElementById('f-busca').value;
@@ -420,6 +493,8 @@
     await authFetch('/api/registros/' + EDITANDO_ID, { method: 'PATCH', body: JSON.stringify({ dados }) });
     fecharModal();
     carregarRegistros();
+    carregarClientes();
+    renderizarCalendario();
   }
 
   async function excluirRegistro() {
@@ -428,81 +503,171 @@
     await authFetch('/api/registros/' + EDITANDO_ID, { method: 'DELETE' });
     fecharModal();
     carregarRegistros();
+    carregarClientes();
+    renderizarCalendario();
   }
 
-  // ---------------- Agenda de ocupação ----------------
+  // ---------------- Clientes ----------------
+  async function carregarClientes() {
+    const params = new URLSearchParams();
+    const busca = document.getElementById('c-busca').value;
+    if (busca) params.set('busca', busca);
+    const res = await authFetch('/api/clientes?' + params.toString());
+    CLIENTES = await res.json();
+    renderizarClientes();
+  }
+
+  function renderizarClientes() {
+    const tbody = document.getElementById('tabela-clientes');
+    tbody.innerHTML = '';
+    document.getElementById('count-clientes').textContent = CLIENTES.length + ' cliente(s)';
+    document.getElementById('clientes-empty').style.display = CLIENTES.length ? 'none' : 'block';
+
+    CLIENTES.forEach((c) => {
+      const cabanasUnicas = [...new Set(c.estadias.map((e) => e.cabana).filter(Boolean))].join(', ');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${c.nome || '(sem nome)'}</td>
+        <td class="mono">${c.telefone || '—'}</td>
+        <td>${c.email || '—'}</td>
+        <td>${c.estadias.length}</td>
+        <td>${cabanasUnicas || '—'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function exportarClientes() {
+    const linhas = CLIENTES.map((c) => ({
+      Nome: c.nome,
+      Telefone: c.telefone,
+      Email: c.email,
+      CPF: c.cpf,
+      Endereço: c.endereco,
+      'Nº de estadias': c.estadias.length,
+      Cabanas: [...new Set(c.estadias.map((e) => e.cabana).filter(Boolean))].join(', '),
+    }));
+    const planilha = XLSX.utils.json_to_sheet(linhas);
+    const livro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(livro, planilha, 'Clientes');
+    XLSX.writeFile(livro, 'clientes-vila-pinheiro.xlsx');
+  }
+
+  // ---------------- Calendário mensal (estilo Google Agenda) ----------------
   function isoParaData(iso) {
     const [ano, mes, dia] = iso.split('-').map(Number);
     return new Date(ano, mes - 1, dia);
   }
 
-  async function montarAgenda() {
-    const res = await authFetch('/api/registros');
-    const todos = await res.json();
-    const dias = 30;
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
+  function corDaCabana(nomeCabana) {
+    const alvo = (nomeCabana || '').toLowerCase();
+    const c = CABANAS.find((c) => alvo.includes(c.nome.toLowerCase()));
+    return c ? c.cor : '#6E7F5C';
+  }
 
-    const header = document.getElementById('agenda-header');
-    header.innerHTML = '';
-    for (let i = 0; i < dias; i++) {
-      const d = new Date(hoje);
-      d.setDate(d.getDate() + i);
-      const div = document.createElement('div');
-      div.className = 'day';
-      div.textContent = d.getDate();
-      header.appendChild(div);
+  function mudarMes(delta) {
+    MES_ATUAL += delta;
+    if (MES_ATUAL < 0) { MES_ATUAL = 11; ANO_ATUAL--; }
+    if (MES_ATUAL > 11) { MES_ATUAL = 0; ANO_ATUAL++; }
+    renderizarCalendario();
+  }
+
+  function irParaHoje() {
+    const hoje = new Date();
+    MES_ATUAL = hoje.getMonth();
+    ANO_ATUAL = hoje.getFullYear();
+    renderizarCalendario();
+  }
+
+  async function renderizarCalendario() {
+    const nomesMes = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+    document.getElementById('cal-mes-label').textContent = `${nomesMes[MES_ATUAL]} de ${ANO_ATUAL}`;
+
+    const res = await authFetch('/api/registros');
+    const todos = (await res.json()).filter((r) => r.checkin_iso && r.checkout_iso);
+
+    const primeiroDiaMes = new Date(ANO_ATUAL, MES_ATUAL, 1);
+    const ultimoDiaMes = new Date(ANO_ATUAL, MES_ATUAL + 1, 0);
+    const inicioGrid = new Date(primeiroDiaMes);
+    inicioGrid.setDate(inicioGrid.getDate() - inicioGrid.getDay());
+    const fimGrid = new Date(ultimoDiaMes);
+    fimGrid.setDate(fimGrid.getDate() + (6 - fimGrid.getDay()));
+
+    const semanas = [];
+    let cursor = new Date(inicioGrid);
+    while (cursor <= fimGrid) {
+      const semana = [];
+      for (let i = 0; i < 7; i++) {
+        semana.push(new Date(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      semanas.push(semana);
     }
 
-    const rowsEl = document.getElementById('agenda-rows');
-    rowsEl.innerHTML = '';
+    const semanasEl = document.getElementById('cal-semanas');
+    semanasEl.innerHTML = '';
 
-    CABANAS.forEach((nomeCabana) => {
-      const reservasDaCabana = todos.filter(
-        (r) => r.checkin_iso && r.checkout_iso && (r.dados?.cabana || '').toLowerCase().includes(nomeCabana.toLowerCase())
-      );
+    semanas.forEach((semana) => {
+      const weekStart = semana[0];
+      const weekEnd = semana[6];
 
-      const row = document.createElement('div');
-      row.className = 'agenda-row';
-      const label = document.createElement('div');
-      label.className = 'agenda-label';
-      label.textContent = nomeCabana;
-      row.appendChild(label);
-
-      const track = document.createElement('div');
-      track.className = 'agenda-track';
-
-      for (let i = 0; i < dias; i++) {
-        const d = new Date(hoje);
-        d.setDate(d.getDate() + i);
-        const cell = document.createElement('div');
-        cell.className = 'agenda-cell' + ([0, 6].includes(d.getDay()) ? ' weekend' : '');
-
-        const ocupacao = reservasDaCabana.find((r) => {
+      const eventosNaSemana = todos
+        .map((r) => {
           const checkin = isoParaData(r.checkin_iso);
-          const checkout = isoParaData(r.checkout_iso);
-          return d >= checkin && d < checkout;
-        });
+          const ultimoDiaOcupado = new Date(isoParaData(r.checkout_iso));
+          ultimoDiaOcupado.setDate(ultimoDiaOcupado.getDate() - 1);
+          if (ultimoDiaOcupado < weekStart || checkin > weekEnd) return null;
+          const inicioCol = Math.max(0, Math.round((checkin - weekStart) / 86400000));
+          const fimCol = Math.min(6, Math.round((ultimoDiaOcupado - weekStart) / 86400000));
+          return { registro: r, inicioCol, fimCol };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.inicioCol - b.inicioCol);
 
-        if (ocupacao) {
-          const bar = document.createElement('div');
-          const checkin = isoParaData(ocupacao.checkin_iso);
-          const checkout = isoParaData(ocupacao.checkout_iso);
-          bar.className = 'bar';
-          if (d.getTime() === checkin.getTime()) bar.className += ' start';
-          const ultimoDia = new Date(checkout); ultimoDia.setDate(ultimoDia.getDate() - 1);
-          if (d.getTime() === ultimoDia.getTime()) bar.className += ' end';
+      // Atribui "raias" (lanes) pra não sobrepor barras da mesma semana
+      const finalDasRaias = [];
+      eventosNaSemana.forEach((ev) => {
+        let raia = finalDasRaias.findIndex((fim) => fim < ev.inicioCol);
+        if (raia === -1) { raia = finalDasRaias.length; finalDasRaias.push(-1); }
+        finalDasRaias[raia] = ev.fimCol;
+        ev.raia = raia;
+      });
+      const totalRaias = Math.max(1, finalDasRaias.length);
 
-          const tooltip = document.createElement('div');
-          tooltip.className = 'agenda-tooltip';
-          tooltip.textContent = nomeHospedeDe(ocupacao);
-          bar.appendChild(tooltip);
-          cell.appendChild(bar);
-        }
-        track.appendChild(cell);
-      }
-      row.appendChild(track);
-      rowsEl.appendChild(row);
+      const weekEl = document.createElement('div');
+      weekEl.className = 'cal-week';
+
+      const daynumsEl = document.createElement('div');
+      daynumsEl.className = 'cal-daynums';
+      semana.forEach((dia) => {
+        const div = document.createElement('div');
+        div.textContent = dia.getDate();
+        if (dia.getMonth() !== MES_ATUAL) div.className = 'fora-do-mes';
+        daynumsEl.appendChild(div);
+      });
+      weekEl.appendChild(daynumsEl);
+
+      const barsEl = document.createElement('div');
+      barsEl.className = 'cal-bars';
+      barsEl.style.height = (totalRaias * 24 + 4) + 'px';
+
+      eventosNaSemana.forEach((ev) => {
+        const r = ev.registro;
+        const nomeHospede = nomeHospedeDe(r);
+        const telefone = r.telefone || 'sem telefone cadastrado';
+        const bar = document.createElement('div');
+        bar.className = 'cal-bar';
+        bar.style.left = (ev.inicioCol * (100 / 7)) + '%';
+        bar.style.width = ((ev.fimCol - ev.inicioCol + 1) * (100 / 7) - 1) + '%';
+        bar.style.top = (ev.raia * 24) + 'px';
+        bar.style.background = corDaCabana(r.dados?.cabana);
+        bar.textContent = `${r.dados?.cabana || 'Cabana'} — ${nomeHospede}`;
+        bar.title = `${nomeHospede} • ${telefone}`;
+        barsEl.appendChild(bar);
+      });
+
+      weekEl.appendChild(barsEl);
+      semanasEl.appendChild(weekEl);
     });
   }
 

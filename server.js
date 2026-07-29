@@ -683,14 +683,117 @@ app.delete('/api/registros/:id', requireAdminKey, (req, res) => {
   res.json({ removido: true });
 });
 
-// Lista as cabanas configuradas (usado pro filtro e pra agenda de ocupação)
+// Lista as cabanas configuradas (nome + cor), usado pro filtro e pra agenda
 app.get('/api/cabanas', requireAdminKey, (req, res) => {
-  res.json(CABANAS.map((c) => c.nome));
+  res.json(CABANAS.map((c) => ({ nome: c.nome, cor: c.cor || '#6E7F5C' })));
 });
 
 // Serve o painel web do CRM (arquivo estático em /public/crm.html)
 app.get('/crm', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'crm.html'));
+});
+
+// ----------------------------------------------------------------------------
+// Agrega os registros (cadastros + reservas) por HÓSPEDE, usando telefone como
+// chave principal (e CPF como reforço, pra juntar registros que vieram de
+// telefones diferentes mas são da mesma pessoa). Isso alimenta a aba "Clientes".
+// ----------------------------------------------------------------------------
+function montarListaDeClientes() {
+  const registros = loadRegistros();
+  const clientesPorChave = new Map();
+
+  function chaveDoRegistro(r) {
+    if (r.telefone) return `tel:${r.telefone}`;
+    const cpf = r.dados?.hospede1?.cpf;
+    if (cpf) return `cpf:${normalize(cpf)}`;
+    return `nome:${normalize(r.dados?.hospede1?.nome || r.dados?.hospede || 'desconhecido')}`;
+  }
+
+  registros.forEach((r) => {
+    const chave = chaveDoRegistro(r);
+    if (!clientesPorChave.has(chave)) {
+      clientesPorChave.set(chave, {
+        nome: '',
+        telefone: r.telefone || '',
+        email: '',
+        cpf: '',
+        endereco: '',
+        estadias: [],
+      });
+    }
+    const cliente = clientesPorChave.get(chave);
+
+    if (r.tipo === 'cadastro' && r.dados?.hospede1) {
+      cliente.nome = cliente.nome || r.dados.hospede1.nome || '';
+      cliente.email = cliente.email || r.dados.hospede1.email || '';
+      cliente.cpf = cliente.cpf || r.dados.hospede1.cpf || '';
+      cliente.endereco = cliente.endereco || r.dados.hospede1.endereco || '';
+      cliente.telefone = cliente.telefone || r.telefone || '';
+    }
+    if (r.tipo === 'reserva') {
+      cliente.nome = cliente.nome || r.dados?.hospede || '';
+    }
+
+    cliente.estadias.push({
+      cabana: r.dados?.cabana || '',
+      checkin: r.dados?.checkin || '',
+      checkout: r.dados?.checkout || '',
+      tipo: r.tipo,
+    });
+  });
+
+  return Array.from(clientesPorChave.values());
+}
+
+// Lista os clientes já agregados (um por hóspede, com histórico de estadias)
+app.get('/api/clientes', requireAdminKey, (req, res) => {
+  let clientes = montarListaDeClientes();
+  const { busca } = req.query;
+  if (busca) {
+    const b = normalize(busca);
+    clientes = clientes.filter((c) => normalize(JSON.stringify(c)).includes(b));
+  }
+  res.json(clientes);
+});
+
+// Roda o lembrete de véspera manualmente, na hora — útil pra testar sem
+// esperar até às 10h. Acesse: /admin/testar-lembretes?key=SUA_ADMIN_KEY
+app.get('/admin/testar-lembretes', requireAdminKey, async (req, res) => {
+  await enviarLembretesDeVespera();
+  res.json({ ok: true, mensagem: 'Verificação de lembretes executada. Veja os logs do Railway para o resultado.' });
+});
+
+// ----------------------------------------------------------------------------
+// Feed de calendário (.ics) — permite "assinar" a agenda de ocupação no Google
+// Agenda (Configurações > Adicionar agenda > A partir de URL), no Apple
+// Calendar ou no Outlook. Atualiza automaticamente quando o Google/Apple
+// sincronizam (geralmente a cada poucas horas — não é em tempo real).
+// ----------------------------------------------------------------------------
+function formatarDataICS(iso) {
+  return iso.replace(/-/g, '');
+}
+
+app.get('/api/calendario.ics', requireAdminKey, (req, res) => {
+  const registros = loadRegistros().filter((r) => r.checkin_iso && r.checkout_iso);
+
+  const eventos = registros.map((r) => {
+    const nomeHospede = r.dados?.hospede1?.nome || r.dados?.hospede || 'Hóspede';
+    const telefone = r.telefone || '';
+    return [
+      'BEGIN:VEVENT',
+      `UID:${r.id}@vilapinheiro`,
+      `DTSTART;VALUE=DATE:${formatarDataICS(r.checkin_iso)}`,
+      `DTEND;VALUE=DATE:${formatarDataICS(r.checkout_iso)}`,
+      `SUMMARY:${r.dados?.cabana || 'Cabana'} — ${nomeHospede}`,
+      `DESCRIPTION:Telefone: ${telefone}`,
+      'END:VEVENT',
+    ].join('\r\n');
+  });
+
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vila Pinheiro//Ocupacao//PT', ...eventos, 'END:VCALENDAR'].join('\r\n');
+
+  res.set('Content-Type', 'text/calendar; charset=utf-8');
+  res.send(ics);
 });
 
 // Checagem simples de que o servidor está de pé

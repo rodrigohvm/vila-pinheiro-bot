@@ -25,22 +25,40 @@ Depois disso, fica salvo no navegador e não pede de novo.
   do formulário básico.
 - **Excluir** remove o registro permanentemente.
 
-### Aba "Agenda"
-Mostra uma linha do tempo de 30 dias por cabana, com barras coloridas nos
-períodos ocupados (calculadas a partir das datas de check-in/check-out de cada
-registro). Passe o mouse sobre uma barra pra ver o nome do hóspede.
+### Aba "Clientes"
+Agrega automaticamente os cadastros e reservas por hóspede (usando telefone, ou
+CPF quando não há telefone), mostrando nome, telefone, email e o histórico de
+estadias de cada um.
+- Busca por nome, telefone ou email.
+- Botão **"Exportar (.xlsx)"** baixa a lista em Excel. Pra usar no Google
+  Planilhas, é só abrir o Google Planilhas → Arquivo → Importar → Fazer upload,
+  e selecionar o arquivo baixado.
 
-Pra uma cabana aparecer na agenda, ela precisa estar cadastrada no arquivo
-`cabanas.json` (veja a próxima seção).
+### Aba "Calendário"
+Visual em formato de mês, parecido com o Google Agenda: cada cabana tem uma
+cor (definida em `cabanas.json`), e aparece uma barra colorida com o nome da
+cabana e do hóspede nos dias de ocupação. Passe o mouse sobre a barra pra ver
+o nome e telefone do hóspede. Use as setas (‹ ›) ou "Hoje" pra navegar entre
+os meses.
+
+**Assinar no Google Agenda / Apple Calendar / Outlook:** na mesma aba, tem um
+link pronto (`.../api/calendario.ics?key=...`). No Google Agenda, vá em
+**Configurações → Adicionar agenda → A partir de URL** e cole esse link. A
+agenda de ocupação passa a aparecer dentro do seu Google Agenda pessoal,
+atualizando sozinha (o Google costuma sincronizar a cada poucas horas — não é
+instantâneo, mas é automático).
 
 ## Cabanas, códigos de acesso e lembrete automático de véspera
 
-Edite o arquivo `cabanas.json` com os dados reais de cada cabana:
+Edite o arquivo `cabanas.json` com os dados reais de cada cabana (já vem com
+as 4 cabanas cadastradas — Ipê, Jasmim, Floresta e Manacá — cada uma com uma
+cor pro calendário):
 ```json
 {
   "cabanas": [
     {
       "nome": "Jasmim",
+      "cor": "#3B5BA6",
       "codigo_acesso": "1234#",
       "senha_wifi": "vilapinheiro2026",
       "recomendacoes": "A trilha da cachoeira fica a 5 min a pé. O café da manhã é servido das 7h às 10h na varanda principal."
@@ -50,7 +68,7 @@ Edite o arquivo `cabanas.json` com os dados reais de cada cabana:
 ```
 - `"nome"` precisa bater com o nome da cabana usado nos cadastros/reservas
   (é o mesmo texto que a Claude extrai do formulário/confirmação).
-- Esses dados também aparecem na aba "Agenda" do painel.
+- `"cor"` é só a cor da barra no calendário (qualquer código hexadecimal).
 
 **Todo dia às 10h (horário de Brasília)**, o sistema verifica automaticamente
 quem faz check-in **no dia seguinte** e manda uma mensagem personalizada pro
@@ -59,6 +77,30 @@ recomendações daquela cabana específica. Isso só funciona pra hóspedes que
 passaram pelo formulário de cadastro (onde capturamos o telefone) — reservas
 registradas só pela confirmação interna da equipe não recebem esse lembrete
 automaticamente, pois não têm o telefone do hóspede vinculado.
+
+### Como testar o lembrete sem esperar até amanhã
+Acesse (no navegador ou colando no Postman):
+`https://SEU-ENDERECO-RAILWAY.up.railway.app/admin/testar-lembretes?key=SUA_ADMIN_KEY`
+
+Isso roda a verificação na hora. Pra realmente ver uma mensagem chegando, edite
+temporariamente (na aba Reservas → Editar → avançado) o `checkin` de um
+cadastro de teste pra amanhã, rode esse link, e confira se a mensagem chega no
+WhatsApp cadastrado naquele registro. Depois é só apagar esse registro de
+teste.
+
+### Como confirmar que a extração automática (via WhatsApp) está funcionando
+1. **Cadastro de hóspede:** peça pra alguém (ou você mesmo, de outro número)
+   mandar pro bot uma versão preenchida do `formulario-cadastro.txt`. Em
+   poucos segundos, confira na aba "Reservas" do CRM se apareceu um novo
+   registro do tipo "Cadastro".
+2. **Confirmação de reserva (equipe):** um número que esteja na lista
+   `STAFF_NUMBERS` do `.env` precisa mandar pro bot uma mensagem no formato
+   "HOSPEDARIA VILA PINHEIRO... Pix... Check in... Cabana...". Confira se
+   aparece um registro do tipo "Reserva".
+
+Se algum desses dois não gerar registro, o motivo mais comum é a `ANTHROPIC_API_KEY`
+estar sem crédito/inválida (essa extração depende da Claude) — confira o
+Billing na Anthropic Console.
 
 ## Funil de vendas + CRM leve (cadastro de hóspede e registro de reservas)
 
