@@ -181,6 +181,17 @@ function buildDashboard(registros, cabanasList, hoje = new Date()) {
   }
   const totalPendente = Math.max(0, totalConfirmado - totalPago - totalAtrasado);
 
+  // De onde vieram as reservas (canal de venda) e quanto cada canal gerou.
+  const canaisMap = new Map();
+  for (const r of reservas) {
+    const canal = (r.dados?.canal_venda || '').trim() || 'Não informado';
+    const atual = canaisMap.get(canal) || { canal, quantidade: 0, receita: 0 };
+    atual.quantidade += 1;
+    atual.receita += parseValorBR(r.dados?.valor_total);
+    canaisMap.set(canal, atual);
+  }
+  const canaisVenda = [...canaisMap.values()].sort((a, b) => b.quantidade - a.quantidade);
+
   // Taxa de ocupação do mês corrente
   const ano = hoje.getFullYear();
   const mes = hoje.getMonth();
@@ -210,6 +221,7 @@ function buildDashboard(registros, cabanasList, hoje = new Date()) {
       totalPendente,
       totalAtrasado,
     },
+    canaisVenda,
     taxaOcupacaoMes,
   };
 }

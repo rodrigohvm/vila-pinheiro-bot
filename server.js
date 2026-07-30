@@ -344,7 +344,8 @@ async function extrairDadosEstruturados(texto, tipo) {
 {"hospede1": {"nome": "", "email": "", "cpf": "", "nascimento": "", "endereco": "", "celular": "", "redes_sociais": ""}, "hospede2": null ou o mesmo formato do hospede1, "checkin": "", "checkout": "", "cabana": "", "numero_hospedes": "", "data_comemorativa": "", "como_conheceu": ""}
 Se um campo não estiver preenchido, use uma string vazia "".`
       : `Extraia os dados da confirmação de reserva abaixo e devolva SOMENTE um JSON (sem markdown, sem texto extra) no formato:
-{"data_reserva": "", "valor_total": "", "forma_pagamento": "", "parcelas": [{"valor": "", "data": "", "paga": false}], "hospede": "", "checkin": "", "checkout": "", "cabana": ""}
+{"data_reserva": "", "valor_total": "", "forma_pagamento": "", "parcelas": [{"valor": "", "data": "", "paga": false}], "hospede": "", "checkin": "", "checkout": "", "cabana": "", "numero_diarias": "", "canal_venda": "", "adicionais": ""}
+"canal_venda" é de onde veio a venda (ex: Instagram, Airbnb, indicação, Google). "adicionais" são ocasiões especiais ou extras contratados (ex: aniversário, lua de mel, decoração).
 Se um campo não existir na mensagem, use uma string vazia "" ou lista vazia []. Toda parcela extraída da mensagem começa com "paga": false — o pagamento é confirmado depois, manualmente, pela equipe.`;
 
   const response = await axios.post(
