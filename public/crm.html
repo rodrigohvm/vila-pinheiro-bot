@@ -315,6 +315,10 @@
             <h3>📅 Próximos 7 dias</h3>
             <ul class="dash-list" id="dash-proximos-lista"></ul>
           </div>
+          <div class="dash-panel">
+            <h3>📣 De onde vêm as reservas</h3>
+            <ul class="dash-list" id="dash-canais-lista"></ul>
+          </div>
         </div>
       </section>
 
@@ -416,6 +420,12 @@
       <input id="edit-checkin" type="text" />
       <label>Check-out (dd/mm/aa)</label>
       <input id="edit-checkout" type="text" />
+      <div id="edit-reserva-wrapper" style="display:none;">
+        <label>Canal de venda</label>
+        <input id="edit-canal-venda" type="text" placeholder="Ex: Instagram, Airbnb, indicação..." />
+        <label>Ocasiões / Adicionais</label>
+        <input id="edit-adicionais" type="text" placeholder="Ex: aniversário, lua de mel..." />
+      </div>
       <div id="edit-parcelas-wrapper" style="display:none;">
         <label>Parcelas (marque as pagas)</label>
         <div class="parcelas-lista" id="edit-parcelas-lista"></div>
@@ -542,6 +552,12 @@
           return `<li><span>${rotulo} · ${e.cabana} — ${e.hospede}</span><span class="d-data">${dataFmt}</span></li>`;
         }).join('')
       : '<div class="dash-empty">Nada agendado pros próximos 7 dias.</div>';
+
+    const canaisEl = document.getElementById('dash-canais-lista');
+    const canais = dash.canaisVenda || [];
+    canaisEl.innerHTML = canais.length
+      ? canais.map((c) => `<li><span>${c.canal} <strong>(${c.quantidade})</strong></span><span class="d-data">${formatBRL(c.receita)}</span></li>`).join('')
+      : '<div class="dash-empty">Nenhuma reserva registrada ainda.</div>';
   }
 
   function formatBRL(n) {
@@ -617,6 +633,15 @@
     document.getElementById('edit-checkout').value = r.dados?.checkout || '';
     document.getElementById('edit-json').value = JSON.stringify(r.dados, null, 2);
 
+    const reservaWrapper = document.getElementById('edit-reserva-wrapper');
+    if (r.tipo === 'reserva') {
+      reservaWrapper.style.display = 'block';
+      document.getElementById('edit-canal-venda').value = r.dados?.canal_venda || '';
+      document.getElementById('edit-adicionais').value = r.dados?.adicionais || '';
+    } else {
+      reservaWrapper.style.display = 'none';
+    }
+
     const wrapper = document.getElementById('edit-parcelas-wrapper');
     const lista = document.getElementById('edit-parcelas-lista');
     lista.innerHTML = '';
@@ -659,6 +684,11 @@
     dados.checkout = document.getElementById('edit-checkout').value;
     if (dados.hospede1) dados.hospede1.nome = document.getElementById('edit-hospede').value;
     if (!dados.hospede1 && 'hospede' in dados) dados.hospede = document.getElementById('edit-hospede').value;
+
+    if (document.getElementById('edit-reserva-wrapper').style.display !== 'none') {
+      dados.canal_venda = document.getElementById('edit-canal-venda').value;
+      dados.adicionais = document.getElementById('edit-adicionais').value;
+    }
 
     if (Array.isArray(dados.parcelas) && dados.parcelas.length) {
       dados.parcelas = dados.parcelas.map((p, i) => ({
