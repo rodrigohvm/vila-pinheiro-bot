@@ -171,9 +171,11 @@ function toDirectDriveLink(driveUrl) {
 // `enviarDocumento` é a função de envio específica do canal (WhatsApp ou
 // Instagram), assim essa lógica não se repete em cada canal.
 async function enviarPdfsBoasVindas(to, enviarDocumento) {
-  for (const apelido of MENU.pdfs_boas_vindas || []) {
-    await enviarDocumento(to, apelido);
-  }
+  // Em paralelo (não um de cada vez) — cada PDF agora envolve baixar do Drive
+  // e reenviar pro WhatsApp, então em sequência isso ficava lento demais.
+  // A ordem entre os PDFs deixa de ser garantida, só a posição deles em
+  // relação ao menu (que continua vindo por último, com o delay).
+  await Promise.all((MENU.pdfs_boas_vindas || []).map((apelido) => enviarDocumento(to, apelido)));
 }
 
 // Extrai as tags [ENVIAR_PDF:apelido] do texto, removendo-as da mensagem
@@ -446,15 +448,21 @@ app.post('/webhook/whatsapp', async (req, res) => {
         const dados = await extrairDadosEstruturados(text, 'cadastro');
         if (dados) {
           saveRegistro({ tipo: 'cadastro', dados, textoOriginal: text, telefone: from });
-          await notificarResponsavel(
-            `📋 Novo cadastro de hóspede recebido!\nHóspede 1: ${dados.hospede1?.nome || '(não informado)'}\nCheck-in: ${dados.checkin} → Check-out: ${dados.checkout}\nCabana: ${dados.cabana}\nTelefone do hóspede: ${from}`
+          await encaminharParaEquipe(
+            'whatsapp',
+            from,
+            `[cadastro extraído] Hóspede 1: ${dados.hospede1?.nome || '(não informado)'} | Check-in: ${dados.checkin} → Check-out: ${dados.checkout} | Cabana: ${dados.cabana}`
           );
+        } else {
+          // Claude não conseguiu extrair (formato inesperado) — mesmo assim avisa,
+          // com o texto original, pra ninguém ficar sem resposta.
+          await encaminharParaEquipe('whatsapp', from, `[cadastro recebido - não consegui extrair automaticamente, revisar manualmente]\n${text}`);
         }
         await sendWhatsAppMessage(from, 'Recebemos seu cadastro! 🙌 Nosso time já foi avisado e vai confirmar sua reserva em breve.');
       } else {
-        // Sem IA configurada: não há como extrair/avisar automaticamente.
-        // Registra em /admin/escalations pra ninguém ficar sem resposta.
-        logEscalation('whatsapp', from, `[cadastro recebido - IA desligada, revisar manualmente] ${text}`);
+        // Sem IA configurada: não há como extrair automaticamente, mas ainda
+        // notifica a equipe de verdade, com o texto original.
+        await encaminharParaEquipe('whatsapp', from, `[cadastro recebido - IA desligada, revisar manualmente]\n${text}`);
         await sendWhatsAppMessage(from, 'Recebemos seu cadastro! 🙌 Nosso time vai revisar e confirmar sua reserva em breve.');
       }
       return;

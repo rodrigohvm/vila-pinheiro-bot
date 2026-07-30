@@ -38,8 +38,7 @@
       "id": "atendente",
       "title": "🙋 Falar com a equipe",
       "aliases": ["atendente", "humano", "pessoa", "falar com alguem", "equipe", "reservar", "quero reservar", "fechar reserva", "disponibilidade"],
-      "response": "⏰ *Atendimento*\nAguarde um momento. Em breve um membro da nossa equipe irá atendê-lo.\n\n🕘 Horário de atendimento: Segunda a sexta-feira, das 9h às 18h.\nCaso sua mensagem tenha sido enviada fora desse horário, responderemos o mais breve possível.\n\nEquipe Vila Pinheiro 🌲\n\nPra já ir adiantando, me ajuda preenchendo esse cadastro rápido? Assim que enviar, nosso time já vai receber tudo prontinho pra confirmar sua reserva 🙂",
-      "sendForm": true,
+      "response": "⏰ *Atendimento*\nAguarde um momento. Em breve um membro da nossa equipe irá atendê-lo.\n\n🕘 Horário de atendimento: Segunda a sexta-feira, das 9h às 18h.\nCaso sua mensagem tenha sido enviada fora desse horário, responderemos o mais breve possível.\n\nEquipe Vila Pinheiro 🌲",
       "escalate": true
     }
   ]
