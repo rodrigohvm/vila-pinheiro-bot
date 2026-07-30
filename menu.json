@@ -1,40 +1,45 @@
 {
-  "_comentario": "Edite os textos abaixo com as respostas reais da Vila Pinheiro. 'aliases' são as palavras que, se o cliente digitar, disparam essa resposta pronta (sem gastar com IA). 'id' é usado internamente quando o cliente clica num botão do menu.",
+  "_comentario": "Edite os textos abaixo com as respostas reais da Vila Pinheiro. 'aliases' são as palavras que, se o cliente digitar, disparam essa resposta pronta (sem gastar com IA). 'pdfs_boas_vindas' é a lista de PDFs enviados automaticamente no primeiro contato, antes do menu aparecer.",
 
-  "welcome_text": "Olá! 🌿 Seja bem-vindo(a) à Vila Pinheiro Cabanas. Escolha uma opção abaixo ou digite sua dúvida:",
+  "welcome_text": "Seja bem-vindo à Vila Pinheiro! 🌿\nLocalizado em Santa Teresa (ES), nosso refúgio de 30.000 m² oferece quatro cabanas exclusivas: Ipê, Manacá, Jasmim e Floresta.\nTodas possuem:\n• Suíte integrada\n• Sala de estar\n• Cozinha equipada\n• Banheira de hidromassagem\n• Área externa privativa\n\nEstamos cercados pela Mata Atlântica preservada, proporcionando tranquilidade, privacidade e uma vista privilegiada para quem busca descanso e conexão com a natureza.\nPara tornar sua experiência ainda mais especial, você também pode aproveitar:\n• 🌿 Nossa trilha ecológica exclusiva\n• 💧 A piscina natural com água viva, filtragem por ozônio e luz UV\n• 🏖️ Uma área especial conhecida como a \"praia nas montanhas\"\n\nSerá um prazer receber você na Vila Pinheiro! 💚\nJá vou te mandar um pouquinho sobre a gente 👇",
+
+  "pdfs_boas_vindas": [
+    "apresentacao-vila-pinheiro",
+    "fotos-ipe",
+    "fotos-jasmim",
+    "fotos-floresta",
+    "fotos-manaca",
+    "piscina-trilha"
+  ],
+
+  "menu_prompt_text": "Como podemos te ajudar? 🌿",
 
   "items": [
     {
-      "id": "precos",
-      "title": "💰 Preços",
-      "aliases": ["preço", "preco", "precos", "preços", "valor", "valores", "quanto custa", "diária", "diaria"],
-      "response": "Nossas diárias variam conforme a temporada e o tipo de cabana. Vou te enviar a tabela completa em PDF 👇",
-      "pdf": "tabela-precos"
+      "id": "tarifas-info",
+      "title": "💰 Tarifas e info",
+      "aliases": ["preço", "preco", "precos", "preços", "valor", "valores", "quanto custa", "diária", "diaria", "tarifa", "tarifas", "hospedagem", "informações", "informacoes", "checkin", "check-in", "checkout", "check-out", "cancelamento", "política", "politica", "horário", "horario", "comodidade", "comodidades", "wifi", "café da manhã", "cafe da manha", "pet", "animais", "ar condicionado"],
+      "response": "💰 *Tarifas e Informações da Hospedagem*\n\n*Cabana Ipê*\nDias de semana: R$ 900,00 por diária.\nFinais de semana: R$ 1.000,00 por diária.\nMínimo de 2 diárias.\n\n*Cabanas Jasmim, Manacá e Floresta*\nDias de semana: R$ 900,00 por diária.\nFinais de semana: R$ 1.200,00 por diária.\nMínimo de 2 diárias.\n\n*Informações importantes*\n• Consulte valores para feriados e datas comemorativas.\n• Formas de pagamento:\n   • Pix\n   • Cartão de crédito em até 3x sem juros\n• Capacidade máxima: 2 hóspedes por cabana.\n\nAqui está também o nosso welcome book, com mais detalhes sobre a hospedagem 👇",
+      "pdf": "wellcome-book"
     },
     {
-      "id": "localizacao",
-      "title": "📍 Localização",
-      "aliases": ["localização", "localizacao", "onde fica", "endereço", "endereco", "como chegar", "mapa"],
-      "response": "Ficamos em Santa Teresa, Espírito Santo. Segue o mapa e as instruções de acesso 👇",
-      "pdf": "mapa-acesso"
+      "id": "instagram",
+      "title": "📸 Nosso Instagram",
+      "aliases": ["instagram", "insta", "rede social", "redes sociais"],
+      "response": "📸 *Nosso Instagram*\nAcompanhe nosso Instagram e conheça melhor a Vila Pinheiro!\n👉 https://www.instagram.com/vilapinheirocabanas/\n\nLá você encontrará fotos, vídeos e novidades sobre nossas cabanas e experiências.\nCaso tenha qualquer dúvida, estaremos à disposição para ajudar. 😊"
     },
     {
-      "id": "politicas",
-      "title": "📋 Check-in e políticas",
-      "aliases": ["checkin", "check-in", "checkout", "check-out", "cancelamento", "política", "politica", "horário", "horario"],
-      "response": "[EDITE AQUI: horários de check-in/check-out e política de cancelamento da Vila Pinheiro]"
-    },
-    {
-      "id": "comodidades",
-      "title": "🏡 Comodidades",
-      "aliases": ["comodidade", "wifi", "piscina", "café da manhã", "cafe da manha", "pet", "animais", "ar condicionado"],
-      "response": "[EDITE AQUI: lista das comodidades das cabanas]"
+      "id": "piscina-trilha",
+      "title": "🏞️ Piscina e trilha",
+      "aliases": ["piscina", "trilha", "piscina natural", "cachoeira"],
+      "response": "🌿 *Piscina Natural e Trilha*\nPensando em proporcionar uma experiência ainda mais imersiva na natureza, desenvolvemos uma trilha exclusiva dentro do nosso refúgio.\nAo final do percurso, os hóspedes encontram nossa Piscina Natural, um espaço cuidadosamente preparado para relaxar em meio à natureza.\n\nO local possui:\n• Água viva\n• Filtragem por ozônio e luz UV\n• Ambiente ideal para descanso e contemplação\n\n🎥 Conheça um pouco mais:\nhttps://www.instagram.com/reel/DX6wMkuIbjS/\n\nO uso da piscina natural é exclusivo para hóspedes.\n\nSegue também o material com mais detalhes 👇",
+      "pdf": "piscina-trilha"
     },
     {
       "id": "atendente",
-      "title": "🙋 Falar com atendente",
-      "aliases": ["atendente", "humano", "pessoa", "falar com alguem", "reservar", "quero reservar", "fechar reserva", "disponibilidade"],
-      "response": "Perfeito! Pra agilizar seu atendimento, me ajuda preenchendo esse cadastro rápido? Assim que enviar, nosso time já vai receber tudo prontinho pra confirmar sua reserva 🙂",
+      "title": "🙋 Falar com a equipe",
+      "aliases": ["atendente", "humano", "pessoa", "falar com alguem", "equipe", "reservar", "quero reservar", "fechar reserva", "disponibilidade"],
+      "response": "⏰ *Atendimento*\nAguarde um momento. Em breve um membro da nossa equipe irá atendê-lo.\n\n🕘 Horário de atendimento: Segunda a sexta-feira, das 9h às 18h.\nCaso sua mensagem tenha sido enviada fora desse horário, responderemos o mais breve possível.\n\nEquipe Vila Pinheiro 🌲\n\nPra já ir adiantando, me ajuda preenchendo esse cadastro rápido? Assim que enviar, nosso time já vai receber tudo prontinho pra confirmar sua reserva 🙂",
       "sendForm": true,
       "escalate": true
     }

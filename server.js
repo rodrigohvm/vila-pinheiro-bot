@@ -166,6 +166,15 @@ function toDirectDriveLink(driveUrl) {
   return `https://drive.google.com/uc?export=download&id=${fileId}`;
 }
 
+// Envia, em sequência, todos os PDFs listados em menu.json > pdfs_boas_vindas.
+// `enviarDocumento` é a função de envio específica do canal (WhatsApp ou
+// Instagram), assim essa lógica não se repete em cada canal.
+async function enviarPdfsBoasVindas(to, enviarDocumento) {
+  for (const apelido of MENU.pdfs_boas_vindas || []) {
+    await enviarDocumento(to, apelido);
+  }
+}
+
 // Extrai as tags [ENVIAR_PDF:apelido] do texto, removendo-as da mensagem
 // e devolvendo a lista de apelidos encontrados.
 function extractPdfTags(text) {
@@ -435,9 +444,11 @@ app.post('/webhook/whatsapp', async (req, res) => {
       return;
     }
 
-    // 2) Primeiro contato desse cliente: manda o menu de opções em vez de já chamar a IA
+    // 2) Primeiro contato desse cliente: manda boas-vindas + PDFs de apresentação
+    // + menu de opções, em vez de já chamar a IA
     if (getHistory(key).length === 0) {
       await sendWhatsAppMessage(from, MENU.welcome_text);
+      await enviarPdfsBoasVindas(from, sendWhatsAppDocument);
       await sendWhatsAppInteractiveList(from);
       return;
     }
@@ -480,7 +491,7 @@ async function sendWhatsAppInteractiveList(to) {
       type: 'interactive',
       interactive: {
         type: 'list',
-        body: { text: 'Escolha uma opção:' },
+        body: { text: MENU.menu_prompt_text || 'Escolha uma opção:' },
         action: {
           button: 'Ver opções',
           sections: [
@@ -580,8 +591,11 @@ app.post('/webhook/instagram', async (req, res) => {
       return;
     }
 
-    // 2) Primeiro contato: manda o menu como texto numerado em vez de chamar a IA direto
+    // 2) Primeiro contato: manda boas-vindas + PDFs de apresentação + menu como
+    // texto numerado (Instagram não tem lista interativa como o WhatsApp)
     if (getHistory(key).length === 0) {
+      await sendInstagramMessage(senderId, MENU.welcome_text);
+      await enviarPdfsBoasVindas(senderId, sendInstagramDocument);
       await sendInstagramMessage(senderId, buildTextMenu());
       return;
     }
@@ -621,9 +635,10 @@ async function sendInstagramMessage(recipientId, text) {
 
 // Monta o menu como texto simples (o Instagram Direct não tem uma lista
 // interativa tão simples quanto o WhatsApp, então usamos texto numerado).
+// O welcome_text já foi enviado antes disso — aqui só o convite pra escolher.
 function buildTextMenu() {
   const linhas = MENU.items.map((item, i) => `${i + 1}. ${item.title}`);
-  return `${MENU.welcome_text}\n\n${linhas.join('\n')}\n\nÉ só digitar o assunto que você quer saber.`;
+  return `${MENU.menu_prompt_text || 'Como podemos ajudar?'}\n\n${linhas.join('\n')}\n\nÉ só digitar o assunto que você quer saber.`;
 }
 
 async function handleInstagramMenuItem(recipientId, item) {
@@ -675,6 +690,20 @@ app.get('/admin/escalations', requireAdminKey, (req, res) => {
 // Acesse: https://seu-servidor.up.railway.app/admin/registros?key=SUA_ADMIN_KEY
 app.get('/admin/registros', requireAdminKey, (req, res) => {
   res.json(loadRegistros().slice().reverse());
+});
+
+// Dispara o lembrete de véspera na hora, sem esperar o cron das 10h — útil pra
+// testar antes de ir ao ar. Use ?dryRun=true pra só ver quem receberia a
+// mensagem e o texto exato, sem enviar de verdade nem marcar como enviado.
+// Acesse: https://seu-servidor.up.railway.app/admin/testar-lembretes?key=SUA_ADMIN_KEY&dryRun=true
+app.get('/admin/testar-lembretes', requireAdminKey, async (req, res) => {
+  const dryRun = req.query.dryRun === 'true';
+  try {
+    const resultado = await enviarLembretesDeVespera({ dryRun });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao testar lembretes', detalhe: err.message });
+  }
 });
 
 // ============================================================================
@@ -765,13 +794,15 @@ function amanhaISO() {
   return d.toISOString().slice(0, 10);
 }
 
-async function enviarLembretesDeVespera() {
+async function enviarLembretesDeVespera({ dryRun = false } = {}) {
   const amanha = amanhaISO();
   const registros = loadRegistros();
 
   const candidatos = registros.filter(
     (r) => r.tipo === 'cadastro' && r.checkin_iso === amanha && !r.lembreteEnviado && r.telefone
   );
+
+  const resultado = [];
 
   for (const registro of candidatos) {
     const cabana = findCabana(registro.dados?.cabana);
@@ -781,15 +812,25 @@ async function enviarLembretesDeVespera() {
       ? `Olá, ${nomeHospede}! 🌿 Estamos ansiosos pra te receber amanhã na Vila Pinheiro, na cabana ${cabana.nome}.\n\n🔑 Código de acesso: ${cabana.codigo_acesso}\n📶 Wifi: ${cabana.senha_wifi}\n\n${cabana.recomendacoes}\n\nQualquer coisa, é só chamar por aqui!`
       : `Olá, ${nomeHospede}! 🌿 Estamos ansiosos pra te receber amanhã na Vila Pinheiro. Qualquer dúvida antes da chegada, é só chamar por aqui!`;
 
+    if (dryRun) {
+      resultado.push({ telefone: registro.telefone, hospede: nomeHospede, cabanaEncontrada: Boolean(cabana), mensagem });
+      continue;
+    }
+
     try {
       await sendWhatsAppMessage(registro.telefone, mensagem);
       updateRegistro(registro.id, { lembreteEnviado: true });
       console.log(`✅ Lembrete de véspera enviado pra ${registro.telefone}`);
+      resultado.push({ telefone: registro.telefone, hospede: nomeHospede, enviado: true });
     } catch (err) {
       console.error(`Erro enviando lembrete pra ${registro.telefone}:`, err.response?.data || err.message);
+      resultado.push({ telefone: registro.telefone, hospede: nomeHospede, enviado: false, erro: err.message });
     }
   }
+
+  return { amanha, totalCandidatos: candidatos.length, dryRun, resultado };
 }
+
 
 // Roda todo dia às 10h (horário de Brasília)
 cron.schedule('0 10 * * *', enviarLembretesDeVespera, { timezone: 'America/Sao_Paulo' });
