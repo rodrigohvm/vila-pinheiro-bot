@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const cron = require('node-cron');
+const FormData = require('form-data');
 const {
   ensureParcelaDefaults,
   enrichRegistro,
@@ -193,9 +194,21 @@ function extractPdfTags(text) {
 // OBS: essa memória se perde se o servidor reiniciar. Para um negócio pequeno
 // isso costuma ser suficiente; se crescer, dá pra trocar por um banco de dados.
 // ----------------------------------------------------------------------------
-const conversations = new Map(); // chave: "whatsapp:5527..." ou "instagram:123..."
+const conversations = new Map(); // chave: "whatsapp:5527..." ou "instagram:123..." — histórico só p/ chat da IA
 const MAX_HISTORY_MESSAGES = 16;
 const CONVERSATION_TTL_MS = 6 * 60 * 60 * 1000; // 6 horas de inatividade = esquece
+
+// Rastreia quem já recebeu a mensagem de boas-vindas + PDFs, INDEPENDENTE da IA.
+// Antes isso usava o tamanho do histórico de chat (getHistory), mas esse
+// histórico só é preenchido dentro de askClaude() — ou seja, com o chat da IA
+// desligado (IA_CHAT_ATIVA=false), ele nunca é preenchido, e TODA mensagem de
+// qualquer contato (mesmo o 2º, 3º, 10º contato) era tratada como "primeiro
+// contato", reenviando boas-vindas + 6 PDFs em vez de seguir o fluxo certo.
+const contatosBoasVindasEnviadas = new Set();
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function getHistory(key) {
   const convo = conversations.get(key);
@@ -264,6 +277,16 @@ function logEscalation(channel, from, message) {
   const entry = { channel, from, message, timestamp: new Date().toISOString() };
   escalations.push(entry);
   console.log('🔔 ESCALONAMENTO (cliente quer reservar/fechar):', entry);
+}
+
+// Registra o escalonamento E manda uma notificação de verdade pro WhatsApp da
+// proprietária (OWNER_WHATSAPP_NUMBER). Usado tanto quando o cliente manda algo
+// fora do roteiro quanto quando clica em "Falar com a equipe".
+async function encaminharParaEquipe(channel, from, motivo) {
+  logEscalation(channel, from, motivo);
+  await notificarResponsavel(
+    `📣 Um cliente precisa de atendimento humano!\nCanal: ${channel}\nContato: ${from}\nMotivo: ${motivo}`
+  );
 }
 
 // ----------------------------------------------------------------------------
@@ -357,8 +380,8 @@ const IA_ATIVA = Boolean(process.env.ANTHROPIC_API_KEY);
 // quiser habilitar o chat.
 const IA_CHAT_ATIVA = IA_ATIVA && String(process.env.IA_RESPONDE_CLIENTES).toLowerCase() === 'true';
 
-const RESPOSTA_SEM_IA =
-  'Recebi sua mensagem! No momento nosso assistente automático só responde as opções do menu — em breve nosso time te retorna com essa resposta. 🙂';
+const MENSAGEM_ENCAMINHAMENTO =
+  'Para te ajudar com essa questão, vou te direcionar para a equipe da Vila Pinheiro. Em breve alguém do nosso time responde por aqui! 😊';
 
 // ============================================================================
 // WHATSAPP
@@ -446,9 +469,11 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
     // 2) Primeiro contato desse cliente: manda boas-vindas + PDFs de apresentação
     // + menu de opções, em vez de já chamar a IA
-    if (getHistory(key).length === 0) {
+    if (!contatosBoasVindasEnviadas.has(key)) {
+      contatosBoasVindasEnviadas.add(key);
       await sendWhatsAppMessage(from, MENU.welcome_text);
       await enviarPdfsBoasVindas(from, sendWhatsAppDocument);
+      await sleep(3000); // dá tempo do WhatsApp processar os documentos antes do menu chegar
       await sendWhatsAppInteractiveList(from);
       return;
     }
@@ -457,8 +482,8 @@ app.post('/webhook/whatsapp', async (req, res) => {
     // explicitamente habilitado (IA_CHAT_ATIVA) — extração pro CRM continua
     // funcionando mesmo com o chat desligado.
     if (!IA_CHAT_ATIVA) {
-      await sendWhatsAppMessage(from, RESPOSTA_SEM_IA);
-      logEscalation('whatsapp', from, `[chat da IA desligado] ${text}`);
+      await sendWhatsAppMessage(from, MENSAGEM_ENCAMINHAMENTO);
+      await encaminharParaEquipe('whatsapp', from, text);
       return;
     }
     const { reply, escalate, pdfApelidos } = await askClaude(key, text);
@@ -466,19 +491,19 @@ app.post('/webhook/whatsapp', async (req, res) => {
     for (const apelido of pdfApelidos) {
       await sendWhatsAppDocument(from, apelido);
     }
-    if (escalate) logEscalation('whatsapp', from, text);
+    if (escalate) await encaminharParaEquipe('whatsapp', from, text);
   } catch (err) {
     console.error('Erro processando mensagem do WhatsApp:', err.response?.data || err.message);
   }
 });
 
 // Envia a resposta pronta de um item do menu (texto + PDF, se houver) e
-// registra escalonamento se for o caso — tudo sem gastar com a API da Claude.
+// registra escalonamento (com notificação de verdade pra proprietária) se for o caso.
 async function handleWhatsAppMenuItem(to, item) {
   await sendWhatsAppMessage(to, item.response);
   if (item.pdf) await sendWhatsAppDocument(to, item.pdf);
   if (item.sendForm) await sendWhatsAppMessage(to, FORMULARIO_CADASTRO);
-  if (item.escalate) logEscalation('whatsapp', to, `[menu] ${item.title}`);
+  if (item.escalate) await encaminharParaEquipe('whatsapp', to, `[menu] ${item.title}`);
 }
 
 // Manda o menu como uma lista interativa (botão "Ver opções" que abre a lista)
@@ -530,23 +555,45 @@ async function sendWhatsAppMessage(to, text) {
   );
 }
 
-async function sendWhatsAppDocument(to, apelido) {
+// Baixa o PDF do Google Drive e sobe como mídia do WhatsApp, com o tipo MIME
+// explícito (application/pdf). Faz isso porque o link direto do Drive às vezes
+// devolve o Content-Type errado (application/octet-stream), e o WhatsApp então
+// entrega o arquivo como .bin em vez de .pdf pro hóspede.
+async function uploadWhatsAppMedia(apelido) {
   const driveLink = PDFS[apelido];
-  if (!driveLink) {
+  if (!driveLink) return null;
+  const directLink = toDirectDriveLink(driveLink);
+
+  const arquivo = await axios.get(directLink, { responseType: 'arraybuffer' });
+  const buffer = Buffer.from(arquivo.data);
+
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', 'application/pdf');
+  form.append('file', buffer, { filename: `${apelido}.pdf`, contentType: 'application/pdf' });
+
+  const upload = await axios.post(
+    `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/media`,
+    form,
+    { headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, ...form.getHeaders() } }
+  );
+  return upload.data.id;
+}
+
+async function sendWhatsAppDocument(to, apelido) {
+  if (!PDFS[apelido]) {
     console.warn(`Aviso: apelido de PDF "${apelido}" não encontrado em pdfs.json`);
     return;
   }
-  const directLink = toDirectDriveLink(driveLink);
+  const mediaId = await uploadWhatsAppMedia(apelido);
+  if (!mediaId) return;
   await axios.post(
     `https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
     {
       messaging_product: 'whatsapp',
       to,
       type: 'document',
-      document: {
-        link: directLink,
-        filename: `${apelido}.pdf`,
-      },
+      document: { id: mediaId, filename: `${apelido}.pdf` },
     },
     {
       headers: {
@@ -593,9 +640,11 @@ app.post('/webhook/instagram', async (req, res) => {
 
     // 2) Primeiro contato: manda boas-vindas + PDFs de apresentação + menu como
     // texto numerado (Instagram não tem lista interativa como o WhatsApp)
-    if (getHistory(key).length === 0) {
+    if (!contatosBoasVindasEnviadas.has(key)) {
+      contatosBoasVindasEnviadas.add(key);
       await sendInstagramMessage(senderId, MENU.welcome_text);
       await enviarPdfsBoasVindas(senderId, sendInstagramDocument);
+      await sleep(3000);
       await sendInstagramMessage(senderId, buildTextMenu());
       return;
     }
@@ -604,8 +653,8 @@ app.post('/webhook/instagram', async (req, res) => {
     // explicitamente habilitado (IA_CHAT_ATIVA) — extração pro CRM continua
     // funcionando mesmo com o chat desligado.
     if (!IA_CHAT_ATIVA) {
-      await sendInstagramMessage(senderId, RESPOSTA_SEM_IA);
-      logEscalation('instagram', senderId, `[chat da IA desligado] ${text}`);
+      await sendInstagramMessage(senderId, MENSAGEM_ENCAMINHAMENTO);
+      await encaminharParaEquipe('instagram', senderId, text);
       return;
     }
     const { reply, escalate, pdfApelidos } = await askClaude(key, text);
@@ -613,7 +662,7 @@ app.post('/webhook/instagram', async (req, res) => {
     for (const apelido of pdfApelidos) {
       await sendInstagramDocument(senderId, apelido);
     }
-    if (escalate) logEscalation('instagram', senderId, text);
+    if (escalate) await encaminharParaEquipe('instagram', senderId, text);
   } catch (err) {
     console.error('Erro processando mensagem do Instagram:', err.response?.data || err.message);
   }
@@ -644,16 +693,40 @@ function buildTextMenu() {
 async function handleInstagramMenuItem(recipientId, item) {
   await sendInstagramMessage(recipientId, item.response);
   if (item.pdf) await sendInstagramDocument(recipientId, item.pdf);
-  if (item.escalate) logEscalation('instagram', recipientId, `[menu] ${item.title}`);
+  if (item.escalate) await encaminharParaEquipe('instagram', recipientId, `[menu] ${item.title}`);
+}
+
+// Mesmo princípio do WhatsApp: baixa o PDF e sobe como anexo reutilizável com
+// Content-Type explícito, em vez de mandar um link direto (evita o mesmo
+// problema de o arquivo chegar como .bin). OBS: esse fluxo ainda não foi
+// testado de verdade em uma conversa real do Instagram — só o WhatsApp foi
+// testado até agora.
+async function uploadInstagramMedia(apelido) {
+  const driveLink = PDFS[apelido];
+  if (!driveLink) return null;
+  const directLink = toDirectDriveLink(driveLink);
+
+  const arquivo = await axios.get(directLink, { responseType: 'arraybuffer' });
+  const buffer = Buffer.from(arquivo.data);
+
+  const form = new FormData();
+  form.append('message', JSON.stringify({ attachment: { type: 'file', payload: { is_reusable: true } } }));
+  form.append('filedata', buffer, { filename: `${apelido}.pdf`, contentType: 'application/pdf' });
+
+  const upload = await axios.post('https://graph.facebook.com/v20.0/me/message_attachments', form, {
+    params: { access_token: process.env.INSTAGRAM_PAGE_TOKEN },
+    headers: form.getHeaders(),
+  });
+  return upload.data.attachment_id;
 }
 
 async function sendInstagramDocument(recipientId, apelido) {
-  const driveLink = PDFS[apelido];
-  if (!driveLink) {
+  if (!PDFS[apelido]) {
     console.warn(`Aviso: apelido de PDF "${apelido}" não encontrado em pdfs.json`);
     return;
   }
-  const directLink = toDirectDriveLink(driveLink);
+  const attachmentId = await uploadInstagramMedia(apelido);
+  if (!attachmentId) return;
   await axios.post(
     `https://graph.facebook.com/v20.0/me/messages`,
     {
@@ -661,7 +734,7 @@ async function sendInstagramDocument(recipientId, apelido) {
       message: {
         attachment: {
           type: 'file',
-          payload: { url: directLink, is_reusable: true },
+          payload: { attachment_id: attachmentId },
         },
       },
     },
