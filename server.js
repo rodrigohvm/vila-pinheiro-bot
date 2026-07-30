@@ -12,6 +12,7 @@ const path = require('path');
 const crypto = require('crypto');
 const cron = require('node-cron');
 const FormData = require('form-data');
+const { extrairSemIA } = require('./extrator');
 const {
   ensureParcelaDefaults,
   enrichRegistro,
@@ -338,6 +339,23 @@ function pareceConfirmacaoDeReserva(text) {
 // Chamada única (sem histórico de conversa) pra Claude extrair dados
 // estruturados de um texto, devolvendo APENAS JSON.
 async function extrairDadosEstruturados(texto, tipo) {
+  // 1ª tentativa: extração por regras (sem IA). Como o formulário e o modelo de
+  // confirmação são padronizados pela pousada, isso resolve a grande maioria
+  // dos casos de graça e na hora, sem depender de crédito na Anthropic.
+  const porRegras = extrairSemIA(texto, tipo);
+  if (porRegras) {
+    console.log(`✅ Extração por regras (sem IA) bem-sucedida [${tipo}]`);
+    return porRegras;
+  }
+
+  // 2ª tentativa: se as regras não deram conta (texto muito fora do padrão) e
+  // a IA estiver configurada, usa a Claude como reforço.
+  if (!IA_ATIVA) {
+    console.warn(`⚠️ Não consegui extrair por regras [${tipo}] e a IA não está configurada.`);
+    return null;
+  }
+  console.log(`↪️ Regras não deram conta [${tipo}], tentando com a IA...`);
+
   const instrucoes =
     tipo === 'cadastro'
       ? `Extraia os dados do formulário de cadastro de hóspede abaixo e devolva SOMENTE um JSON (sem markdown, sem texto extra) no formato:
@@ -453,43 +471,32 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
     // 0a) Equipe colando a confirmação interna de reserva (Pix, parcelas, cabana)
     if (STAFF_NUMBERS.includes(from) && pareceConfirmacaoDeReserva(text)) {
-      if (!IA_ATIVA) {
-        await sendWhatsAppMessage(from, 'IA ainda não configurada — não consigo extrair os dados agora.');
-        return;
-      }
       const dados = await extrairDadosEstruturados(text, 'reserva');
       if (dados) {
         saveRegistro({ tipo: 'reserva', dados, textoOriginal: text });
         await sendWhatsAppMessage(from, `✅ Reserva registrada no sistema!\nHóspede: ${dados.hospede}\nCabana: ${dados.cabana}\nCheck-in: ${dados.checkin} → Check-out: ${dados.checkout}`);
       } else {
-        await sendWhatsAppMessage(from, '⚠️ Recebi a mensagem, mas não consegui extrair os dados automaticamente. Registre manualmente.');
+        await sendWhatsAppMessage(from, '⚠️ Recebi a mensagem, mas não consegui extrair os dados automaticamente. Registre manualmente pelo CRM.');
       }
       return;
     }
 
     // 0b) Hóspede respondendo o formulário de cadastro
     if (pareceFormularioDeHospede(text)) {
-      if (IA_ATIVA) {
-        const dados = await extrairDadosEstruturados(text, 'cadastro');
-        if (dados) {
-          saveRegistro({ tipo: 'cadastro', dados, textoOriginal: text, telefone: from });
-          await encaminharParaEquipe(
-            'whatsapp',
-            from,
-            `[cadastro extraído] Hóspede 1: ${dados.hospede1?.nome || '(não informado)'} | Check-in: ${dados.checkin} → Check-out: ${dados.checkout} | Cabana: ${dados.cabana}`
-          );
-        } else {
-          // Claude não conseguiu extrair (formato inesperado) — mesmo assim avisa,
-          // com o texto original, pra ninguém ficar sem resposta.
-          await encaminharParaEquipe('whatsapp', from, `[cadastro recebido - não consegui extrair automaticamente, revisar manualmente]\n${text}`);
-        }
-        await sendWhatsAppMessage(from, 'Recebemos seu cadastro! 🙌 Nosso time já foi avisado e vai confirmar sua reserva em breve.');
+      const dados = await extrairDadosEstruturados(text, 'cadastro');
+      if (dados) {
+        saveRegistro({ tipo: 'cadastro', dados, textoOriginal: text, telefone: from });
+        await encaminharParaEquipe(
+          'whatsapp',
+          from,
+          `[cadastro extraído] Hóspede 1: ${dados.hospede1?.nome || '(não informado)'} | Check-in: ${dados.checkin} → Check-out: ${dados.checkout} | Cabana: ${dados.cabana}`
+        );
       } else {
-        // Sem IA configurada: não há como extrair automaticamente, mas ainda
-        // notifica a equipe de verdade, com o texto original.
-        await encaminharParaEquipe('whatsapp', from, `[cadastro recebido - IA desligada, revisar manualmente]\n${text}`);
-        await sendWhatsAppMessage(from, 'Recebemos seu cadastro! 🙌 Nosso time vai revisar e confirmar sua reserva em breve.');
+        // Nem as regras nem a IA deram conta — avisa a equipe com o texto
+        // original, pra ninguém ficar sem resposta.
+        await encaminharParaEquipe('whatsapp', from, `[cadastro recebido - não consegui extrair automaticamente, revisar manualmente]\n${text}`);
       }
+      await sendWhatsAppMessage(from, 'Recebemos seu cadastro! 🙌 Nosso time já foi avisado e vai confirmar sua reserva em breve.');
       return;
     }
 
