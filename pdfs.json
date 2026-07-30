@@ -1,6 +1,18 @@
 {
   "_comentario": "Adicione aqui seus PDFs. A chave (à esquerda) é o 'apelido' que você usa no system-prompt.txt junto com a tag [ENVIAR_PDF:apelido]. O valor (à direita) é o link público do Google Drive (compartilhamento: 'Qualquer pessoa com o link pode visualizar').",
 
-  "tabela-precos": "https://drive.google.com/file/d/COLE_O_ID_DO_ARQUIVO_AQUI/view?usp=sharing",
-  "mapa-acesso": "https://drive.google.com/file/d/COLE_O_ID_DO_ARQUIVO_AQUI/view?usp=sharing"
+    "apresentacao-vila-pinheiro": "https://drive.google.com/file/d/1nq7NVg3ROIC-hLRMzi4jPUH0v1BHpolF/view?usp=sharing",
+  "wellcome-book": "https://drive.google.com/file/d/1CuD3onkuaaR0PIJ6zFRdrPiC2gkLv7l5/view?usp=sharing",
+  "piscina-trilha": "https://drive.google.com/file/d/1ju8J5DHcX1hU8Ic4-KzKtxw9-cokVUAz/view?usp=sharing",
+  "floresta-orientacoes":"https://drive.google.com/file/d/1MFx_4C574hBweaNdE9FNCdIDKigzriCT/view?usp=sharing",
+  "painel-de-avisos":"https://drive.google.com/file/d/15IIEEJWH2vSe8jTkPSTgN6KvfcQsfYkB/view?usp=sharing",
+  "manaca-orientacoes":"https://drive.google.com/file/d/1_KaGa0rjJy0_J1YOCgF7xAUO-_Xpc2qZ/view?usp=sharing",
+  "comodidades-uso-comum":"https://drive.google.com/file/d/1YaHQmyujQwHB9d_KBPhemSv3zfapJHXl/view?usp=sharing",
+  "jasmim-orientacoes ":"https://drive.google.com/file/d/1R9s9A30D8O5a0XkJc6UEvwWABff482Fr/view?usp=sharing",
+  "ipe-orientacoes":"https://drive.google.com/file/d/1MQpBjbWaLuhh_rcvc9MgLkIiP3p-ASdn/view?usp=sharing",
+  "fotos-floresta":"https://drive.google.com/file/d/12zDi1FgeGCpGxqxo4RmbfcdDyOQpeBRt/view?usp=sharing",
+  "fotos-ipe":"https://drive.google.com/file/d/196eiurjCFd222ZrEJoYS1szIjBzxgtm2/view?usp=sharing",
+  "fotos-jasmim":"https://drive.google.com/file/d/1oQso9a5qP5h_2Mh_TffPCLxxHHiK05PL/view?usp=sharing",
+  "fotos-manaca":"https://drive.google.com/file/d/1Ifnb7AB3VZuhIKd7gVcR_MNHH6IFZ0tr/view?usp=sharing",
+    
 }
