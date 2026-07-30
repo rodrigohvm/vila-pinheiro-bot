@@ -1,35 +1,29 @@
-Querido hóspede,
-Favor responder o questionário abaixo, para o devido cadastro na hospedaria.
+Querido hóspede, pedimos que responda um breve questionário, para o devido cadastro da reserva.
 
-Hóspede 01:
-Nome completo:
-Email:
-Documento CPF:
-Data de nascimento:
-Endereço completo (com CEP):
-Celular:
-Redes sociais:
+👤 Hóspede 01 (Principal)
+- Nome completo:
+- Data de nascimento:
+- CPF:
+- Endereço completo com CEP:
+- Celular:
+- E-mail:
 
-Hóspede 02 (se houver):
-Nome completo:
-Email:
-Documento CPF:
-Data de nascimento:
-Endereço completo (com CEP):
-Celular:
-Redes sociais:
+👤 Hóspede 02
+- Nome completo:
+- CPF:
+- Celular:
 
-Data do check in e do check out:
-Cabana escolhida:
-Número de hóspedes na reserva:
-Alguma data comemorativa? Qual?
-Como conheceu a hospedaria?
-( ) Indicação de um amigo
-( ) Patrocínio Instagram
-( ) Instagram de forma orgânica
-( ) Pesquisa no Google
-( ) Blog/Instagram de viagem. Qual?
-( ) Airbnb
-( ) Outros. Qual?
+🏡 Dados da Reserva
+- Cabana:
+- Data de Check-in:
+- Data de Check-out:
 
-Obrigada pela atenção e sejam bem vindos!
+🍃 Como você nos conheceu?
+(  ) Indicação de um amigo
+(  ) Patrocínio Instagram
+(  ) Instagram de forma orgânica
+(  ) Pesquisa no Google
+(  ) Airbnb
+(  ) Outros. Qual?
+
+Obrigada pela atenção e sejam bem-vindos à Vila Pinheiro 🌲
