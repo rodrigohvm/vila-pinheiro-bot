@@ -755,6 +755,18 @@ function requireAdminKey(req, res, next) {
   next();
 }
 
+// Reseta o "já recebeu boas-vindas" de um número, útil pra retestar o fluxo de
+// primeiro contato sem precisar reiniciar o servidor inteiro.
+// Acesse: https://seu-servidor.up.railway.app/admin/reset-contato?key=SUA_ADMIN_KEY&telefone=5527...&canal=whatsapp
+app.get('/admin/reset-contato', requireAdminKey, (req, res) => {
+  const { telefone, canal = 'whatsapp' } = req.query;
+  if (!telefone) return res.status(400).json({ erro: 'Informe ?telefone=5527...' });
+  const key = `${canal}:${telefone}`;
+  const havia = contatosBoasVindasEnviadas.delete(key);
+  conversations.delete(key);
+  res.json({ key, resetado: havia });
+});
+
 app.get('/admin/escalations', requireAdminKey, (req, res) => {
   res.json(escalations.slice().reverse());
 });
