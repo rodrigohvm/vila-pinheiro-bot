@@ -793,6 +793,24 @@ function requireAdminKey(req, res, next) {
 // Reseta o "já recebeu boas-vindas" de um número, útil pra retestar o fluxo de
 // primeiro contato sem precisar reiniciar o servidor inteiro.
 // Acesse: https://seu-servidor.up.railway.app/admin/reset-contato?key=SUA_ADMIN_KEY&telefone=5527...&canal=whatsapp
+// Diagnóstico rápido: mostra o que está configurado de verdade, sem expor
+// nenhuma chave/token. Útil pra descobrir se uma variável de ambiente não
+// está sendo lida (nome errado, redeploy não aconteceu, etc.).
+// Acesse: https://seu-servidor.up.railway.app/admin/status?key=SUA_ADMIN_KEY
+app.get('/admin/status', requireAdminKey, (req, res) => {
+  res.json({
+    IA_ATIVA_extracao_cadastro_reserva: IA_ATIVA,
+    IA_CHAT_ATIVA_conversa_livre_com_cliente: IA_CHAT_ATIVA,
+    ANTHROPIC_API_KEY_configurada: Boolean(process.env.ANTHROPIC_API_KEY),
+    WHATSAPP_TOKEN_configurado: Boolean(process.env.WHATSAPP_TOKEN),
+    WHATSAPP_PHONE_NUMBER_ID_configurado: Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID),
+    OWNER_WHATSAPP_NUMBER_configurado: Boolean(process.env.OWNER_WHATSAPP_NUMBER),
+    STAFF_NUMBERS_lista: STAFF_NUMBERS,
+    DATA_DIR: process.env.DATA_DIR || '(não definido, usando padrão)',
+    total_registros_salvos: loadRegistros().length,
+  });
+});
+
 app.get('/admin/reset-contato', requireAdminKey, (req, res) => {
   const { telefone, canal = 'whatsapp' } = req.query;
   if (!telefone) return res.status(400).json({ erro: 'Informe ?telefone=5527...' });
