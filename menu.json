@@ -19,26 +19,27 @@
       "id": "tarifas-info",
       "title": "💰 Tarifas e info",
       "aliases": ["preço", "preco", "precos", "preços", "valor", "valores", "quanto custa", "diária", "diaria", "tarifa", "tarifas", "hospedagem", "informações", "informacoes", "checkin", "check-in", "checkout", "check-out", "cancelamento", "política", "politica", "horário", "horario", "comodidade", "comodidades", "wifi", "café da manhã", "cafe da manha", "pet", "animais", "ar condicionado"],
-      "response": "💰 *Tarifas e Informações da Hospedagem*\n\n*Cabana Ipê*\nDias de semana: R$ 900,00 por diária.\nFinais de semana: R$ 1.000,00 por diária.\nMínimo de 2 diárias.\n\n*Cabanas Jasmim, Manacá e Floresta*\nDias de semana: R$ 900,00 por diária.\nFinais de semana: R$ 1.200,00 por diária.\nMínimo de 2 diárias.\n\n*Informações importantes*\n• Consulte valores para feriados e datas comemorativas.\n• Formas de pagamento:\n   • Pix\n   • Cartão de crédito em até 3x sem juros\n• Capacidade máxima: 2 hóspedes por cabana."
+      "response": "Seguem nossas tarifas e formas de pagamento:\n\n*CABANA IPÊ*\n- Dias de semana: R$ 900 por diária\n- Finais de semana: R$ 1000 por diária (mínimo de 2 diárias)\n\n*CABANAS JASMIM, FLORESTA E MANACÁ*\n- Dias de semana: R$ 900 por diária\n- Finais de semana: R$ 1200 por diária (mínimo de 2 diárias)\n\n*INFORMAÇÕES RESERVA*\n- Consulte valores para feriados e datas comemorativas\n- Formas de pagamento: Pix ou Cartão de crédito em até 3x sem juros\n- Capacidade máxima: 2 hóspedes por cabana",
+      "followUp": "Para adiantar o atendimento, pedimos que preencha as seguintes informações:\n\n- Nome completo:\n- Data Check in:\n- Data Check out:\n- Cabana preferida (Ipê, Manacá, Jasmim ou Floresta):\n\nEm breve nossa equipe entrará em contato para confirmar a disponibilidade 🌿"
     },
     {
       "id": "instagram",
       "title": "📸 Nosso Instagram",
       "aliases": ["instagram", "insta", "rede social", "redes sociais"],
-      "response": "📸 *Nosso Instagram*\nAcompanhe nosso Instagram e conheça melhor a Vila Pinheiro!\n👉 https://www.instagram.com/vilapinheirocabanas/\n\nLá você encontrará fotos, vídeos e novidades sobre nossas cabanas e experiências.\nCaso tenha qualquer dúvida, estaremos à disposição para ajudar. 😊"
+      "response": "📸 *Nosso Instagram*\n\nAcompanhe nosso Instagram e conheça melhor a Vila Pinheiro!\n👉 https://www.instagram.com/vilapinheirocabanas/\n\nLá você encontrará fotos, vídeos e novidades sobre nossas cabanas e experiências.\nCaso tenha qualquer dúvida, estaremos à disposição para ajudar. 😊"
     },
     {
       "id": "piscina-trilha",
       "title": "🏞️ Piscina e trilha",
       "aliases": ["piscina", "trilha", "piscina natural", "cachoeira"],
-      "response": "🌿 *Piscina Natural e Trilha*\nPensando em proporcionar uma experiência ainda mais imersiva na natureza, desenvolvemos uma trilha exclusiva dentro do nosso refúgio.\nAo final do percurso, os hóspedes encontram nossa Piscina Natural, um espaço cuidadosamente preparado para relaxar em meio à natureza.\n\nO local possui:\n• Água viva\n• Filtragem por ozônio e luz UV\n• Ambiente ideal para descanso e contemplação\n\n🎥 Conheça um pouco mais:\nhttps://www.instagram.com/reel/DX6wMkuIbjS/\n\nO uso da piscina natural é exclusivo para hóspedes.\n\nSegue também o material com mais detalhes 👇",
+      "response": "Para proporcionar uma experiência ainda mais especial aos nossos hóspedes, desenvolvemos uma *Trilha exclusiva* em meio a mata que leva até à nossa *Piscina natural*. Um ecossistema vivo, com areia selecionada e filtragem por ozônio e UV. Um espaço para momentos de relaxamento total, conexão com a natureza e vista panorâmica, uma verdadeira praia nas montanhas! 🏝️⛰️\n\n*Uso comum dos hóspedes*\n\nConheça um pouco mais:\nhttps://www.instagram.com/reel/DX6wMkuIbjS/",
       "pdf": "piscina-trilha"
     },
     {
       "id": "atendente",
       "title": "🙋 Falar com a equipe",
       "aliases": ["atendente", "humano", "pessoa", "falar com alguem", "equipe", "reservar", "quero reservar", "fechar reserva", "disponibilidade"],
-      "response": "⏰ *Atendimento*\nAguarde um momento. Em breve um membro da nossa equipe irá atendê-lo.\n\n🕘 Horário de atendimento: Segunda a sexta-feira, das 9h às 18h.\nCaso sua mensagem tenha sido enviada fora desse horário, responderemos o mais breve possível.\n\nEquipe Vila Pinheiro 🌲",
+      "response": "Aguarde um momento, em breve iremos atendê-lo(a).\n\n🕘 Horário de atendimento: *Segunda a sexta-feira, das 9h às 18h*.\n\nCaso sua mensagem tenha sido enviada fora desse horário, responderemos o mais breve possível.\n\nEquipe Vila Pinheiro 🌲",
       "escalate": true
     }
   ]

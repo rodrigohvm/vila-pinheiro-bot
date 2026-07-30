@@ -112,12 +112,20 @@ function updateRegistro(id, novosCampos) {
   const atual = registros[index];
   const dadosAtualizados = { ...atual.dados, ...(novosCampos.dados || {}) };
   if (atual.tipo === 'reserva') ensureParcelaDefaults(dadosAtualizados);
+
+  const novoCheckinIso = normalizeDateBR(dadosAtualizados.checkin) ?? atual.checkin_iso;
+  const checkinMudou = novoCheckinIso !== atual.checkin_iso;
+
   const atualizado = {
     ...atual,
     ...novosCampos,
     dados: dadosAtualizados,
-    checkin_iso: normalizeDateBR(dadosAtualizados.checkin) ?? atual.checkin_iso,
+    checkin_iso: novoCheckinIso,
     checkout_iso: normalizeDateBR(dadosAtualizados.checkout) ?? atual.checkout_iso,
+    // Se a data de check-in mudou (remarcação), reseta o lembrete de véspera
+    // pra ele disparar de novo na data nova — senão quem já tinha recebido o
+    // lembrete pra data antiga nunca mais receberia nada pra data remarcada.
+    lembreteEnviado: checkinMudou ? false : (novosCampos.lembreteEnviado ?? atual.lembreteEnviado),
   };
   registros[index] = atualizado;
   fs.writeFileSync(REGISTROS_PATH, JSON.stringify(registros, null, 2));
@@ -300,7 +308,23 @@ async function encaminharParaEquipe(channel, from, motivo) {
 // ----------------------------------------------------------------------------
 function pareceFormularioDeHospede(text) {
   const t = normalize(text);
-  return t.includes('nome completo') && (t.includes('cpf') || t.includes('check')) && t.length > 80;
+
+  // Sinal 1: hóspede reenviou o modelo do formulário com os rótulos (como antes).
+  const temRotulos = t.includes('nome completo') && (t.includes('cpf') || t.includes('check'));
+
+  // Sinal 2: hóspede só respondeu com os dados soltos, sem repetir os rótulos
+  // do formulário — bem mais comum na prática. Em vez de procurar a palavra
+  // "nome completo", procuramos o FORMATO dos dados: um CPF (11 dígitos,
+  // formatado ou não) junto com pelo menos uma data (dd/mm ou dd/mm/aa).
+  // Essa combinação é um indício forte de cadastro mesmo sem rótulo nenhum.
+  const temCPF = /\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/.test(text) || /\b\d{11}\b/.test(text.replace(/[^\d]/g, ' '));
+  const temData = /\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/.test(text);
+  const pareceDadosSoltos = temCPF && temData;
+
+  // Limite de tamanho bem mais baixo que antes (era 80) — o sinal 2 já é
+  // específico o suficiente (CPF + data juntos são raros em conversa comum),
+  // então não precisamos de um texto longo pra confiar nele.
+  return (temRotulos || pareceDadosSoltos) && t.length > 30;
 }
 
 function pareceConfirmacaoDeReserva(text) {
@@ -510,6 +534,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
 async function handleWhatsAppMenuItem(to, item) {
   await sendWhatsAppMessage(to, item.response);
   if (item.pdf) await sendWhatsAppDocument(to, item.pdf);
+  if (item.followUp) await sendWhatsAppMessage(to, item.followUp);
   if (item.sendForm) await sendWhatsAppMessage(to, FORMULARIO_CADASTRO);
   if (item.escalate) await encaminharParaEquipe('whatsapp', to, `[menu] ${item.title}`);
 }
@@ -701,6 +726,7 @@ function buildTextMenu() {
 async function handleInstagramMenuItem(recipientId, item) {
   await sendInstagramMessage(recipientId, item.response);
   if (item.pdf) await sendInstagramDocument(recipientId, item.pdf);
+  if (item.followUp) await sendInstagramMessage(recipientId, item.followUp);
   if (item.escalate) await encaminharParaEquipe('instagram', recipientId, `[menu] ${item.title}`);
 }
 
