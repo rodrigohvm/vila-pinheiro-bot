@@ -11,7 +11,21 @@
     },
     {
       "nome": "Manacá",
-      "cor": "#6E7F5C",
+      "cor": "#A47DAB",
+      "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
+      "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
+      "recomendacoes": "[EDITE: dicas específicas dessa cabana]"
+    },
+    {
+      "nome": "Floresta",
+      "cor": "#228B22",
+      "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
+      "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
+      "recomendacoes": "[EDITE: dicas específicas dessa cabana]"
+    },
+    {
+      "nome": "Ipê",
+      "cor": "#F2C831",
       "codigo_acesso": "[EDITE: senha da fechadura / instruções de acesso]",
       "senha_wifi": "[EDITE: senha do wifi dessa cabana]",
       "recomendacoes": "[EDITE: dicas específicas dessa cabana]"
