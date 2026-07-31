@@ -1,0 +1,24 @@
+name: Validar antes de subir
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Checar sintaxe dos arquivos .js
+        run: for arquivo in *.js; do node --check "$arquivo"; done
+
+      - name: Validar JSONs e referências entre eles
+        run: node scripts/validar-json.js
+
+      - name: Garantir que o CRM está em public/
+        run: test -f public/crm.html || (echo "❌ public/crm.html não existe — a rota /crm vai dar 404" && exit 1)
