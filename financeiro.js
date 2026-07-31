@@ -7,7 +7,8 @@ function normalize(text) {
   return String(text || '')
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
 }
 
 // "R$ 3.500,00" | "3500,00" | "1.200" | "3500.50" | "3500" -> number
@@ -339,8 +340,162 @@ function escapeICS(text) {
   return String(text).replace(/([,;])/g, '\\$1');
 }
 
+// ----------------------------------------------------------------------------
+// Conflito de reserva (overbooking): duas estadias na MESMA cabana com datas
+// que se sobrepõem.
+//
+// Cuidado importante: uma mesma estadia costuma gerar 2 registros (o cadastro
+// do hóspede + a confirmação da equipe). Isso NÃO é conflito. Consideramos que
+// são a mesma estadia quando as datas batem exatamente, ou quando o nome do
+// hóspede é o mesmo — assim uma diferença de digitação numa das datas aparece
+// como conflito de verdade, pra alguém conferir.
+// ----------------------------------------------------------------------------
+function nomeDoRegistro(r) {
+  return normalize(r.tipo === 'cadastro' ? r.dados?.hospede1?.nome || '' : r.dados?.hospede || '');
+}
+
+function mesmaPessoa(a, b) {
+  const nomeA = nomeDoRegistro(a);
+  const nomeB = nomeDoRegistro(b);
+  if (!nomeA || !nomeB) return false;
+  return nomeA === nomeB || nomeA.includes(nomeB) || nomeB.includes(nomeA);
+}
+
+function mesmaEstadia(a, b) {
+  if (a.checkin_iso === b.checkin_iso && a.checkout_iso === b.checkout_iso) return true;
+  return mesmaPessoa(a, b);
+}
+
+function datasSobrepoem(a, b) {
+  // Checkout é dia de saída: sair e entrar no mesmo dia NÃO é conflito.
+  return a.checkin_iso < b.checkout_iso && b.checkin_iso < a.checkout_iso;
+}
+
+// Devolve um Map: id do registro -> lista de conflitos encontrados.
+function detectarConflitos(registros) {
+  const validos = registros.filter((r) => r.checkin_iso && r.checkout_iso && r.dados?.cabana);
+  const conflitos = new Map();
+
+  function registrar(r, outro) {
+    if (!conflitos.has(r.id)) conflitos.set(r.id, []);
+    conflitos.get(r.id).push({
+      id: outro.id,
+      tipo: outro.tipo,
+      hospede: outro.tipo === 'cadastro' ? outro.dados?.hospede1?.nome || '(sem nome)' : outro.dados?.hospede || '(sem nome)',
+      cabana: outro.dados?.cabana,
+      checkin: outro.dados?.checkin || outro.checkin_iso,
+      checkout: outro.dados?.checkout || outro.checkout_iso,
+    });
+  }
+
+  for (let i = 0; i < validos.length; i++) {
+    for (let j = i + 1; j < validos.length; j++) {
+      const a = validos[i];
+      const b = validos[j];
+      if (normalize(a.dados.cabana) !== normalize(b.dados.cabana)) continue;
+      if (!datasSobrepoem(a, b)) continue;
+      if (mesmaEstadia(a, b)) continue;
+      registrar(a, b);
+      registrar(b, a);
+    }
+  }
+
+  return conflitos;
+}
+
+// Checa se uma estadia NOVA (ainda não salva) bate com alguma já existente.
+function conflitosDeUmaEstadia(novo, registros) {
+  if (!novo.checkin_iso || !novo.checkout_iso || !novo.dados?.cabana) return [];
+  return registros
+    .filter((r) => r.id !== novo.id && r.checkin_iso && r.checkout_iso && r.dados?.cabana)
+    .filter((r) => normalize(r.dados.cabana) === normalize(novo.dados.cabana))
+    .filter((r) => datasSobrepoem(r, novo))
+    .filter((r) => !mesmaEstadia(r, novo))
+    .map((r) => ({
+      id: r.id,
+      tipo: r.tipo,
+      hospede: r.tipo === 'cadastro' ? r.dados?.hospede1?.nome || '(sem nome)' : r.dados?.hospede || '(sem nome)',
+      cabana: r.dados.cabana,
+      checkin: r.dados?.checkin || r.checkin_iso,
+      checkout: r.dados?.checkout || r.checkout_iso,
+    }));
+}
+
+// ----------------------------------------------------------------------------
+// Parcelas: quais merecem um lembrete HOJE pra equipe.
+// Duas situações: "vence em até N dias" e "já venceu". Cada uma dispara uma
+// única vez por parcela — o controle de "já avisei" fica no registro
+// (campo lembretesParcela), não aqui.
+// ----------------------------------------------------------------------------
+function somarDiasISO(iso, dias) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+function listarParcelasParaLembrar(registros, hojeISO, diasDeAntecedencia = 3) {
+  const limite = somarDiasISO(hojeISO, diasDeAntecedencia);
+  const pendencias = [];
+
+  for (const r of registros) {
+    if (r.tipo !== 'reserva') continue;
+    const parcelas = normalizeParcelas(r.dados?.parcelas);
+    const jaAvisado = r.lembretesParcela || {};
+
+    parcelas.forEach((p, indice) => {
+      if (p.paga || !p.data_iso) return;
+
+      const situacao = p.data_iso < hojeISO ? 'atrasada' : p.data_iso <= limite ? 'a_vencer' : null;
+      if (!situacao) return;
+
+      const chave = `${indice}:${situacao}`;
+      if (jaAvisado[chave]) return;
+
+      pendencias.push({
+        registroId: r.id,
+        chave,
+        situacao,
+        indice,
+        numero: indice + 1,
+        total: parcelas.length,
+        valor: p.valor,
+        valor_num: p.valor_num,
+        vencimento: p.data || p.data_iso,
+        vencimento_iso: p.data_iso,
+        hospede: r.dados?.hospede || '(sem nome)',
+        cabana: r.dados?.cabana || '(sem cabana)',
+      });
+    });
+  }
+
+  return pendencias.sort((a, b) => a.vencimento_iso.localeCompare(b.vencimento_iso));
+}
+
+function montarMensagemCobranca(pendencias) {
+  const atrasadas = pendencias.filter((p) => p.situacao === 'atrasada');
+  const aVencer = pendencias.filter((p) => p.situacao === 'a_vencer');
+  const linhas = ['💰 *Parcelas pra acompanhar hoje*'];
+
+  function bloco(titulo, lista) {
+    if (!lista.length) return;
+    linhas.push('', titulo);
+    for (const p of lista) {
+      linhas.push(`• ${p.hospede} — ${p.cabana}\n  Parcela ${p.numero}/${p.total} · ${p.valor || formatValorBRL(p.valor_num)} · vence ${p.vencimento}`);
+    }
+  }
+
+  bloco('🔴 *Em atraso:*', atrasadas);
+  bloco('🟡 *Vencendo nos próximos dias:*', aVencer);
+  linhas.push('', 'Marque como paga no CRM depois de confirmar o recebimento.');
+  return linhas.join('\n');
+}
+
 module.exports = {
   normalize,
+  detectarConflitos,
+  conflitosDeUmaEstadia,
+  listarParcelasParaLembrar,
+  montarMensagemCobranca,
   parseValorBR,
   formatValorBRL,
   normalizeDateBR,

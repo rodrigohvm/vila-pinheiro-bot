@@ -19,7 +19,12 @@ const {
   buildDashboard,
   buildClientes,
   buildICSFeed,
+  detectarConflitos,
+  conflitosDeUmaEstadia,
+  listarParcelasParaLembrar,
+  montarMensagemCobranca,
 } = require('./financeiro');
+const { fazerBackup, backupConfigurado } = require('./backup');
 
 const app = express();
 app.use(express.json());
@@ -138,6 +143,35 @@ function deleteRegistro(id) {
   const restantes = registros.filter((r) => r.id !== id);
   fs.writeFileSync(REGISTROS_PATH, JSON.stringify(restantes, null, 2));
   return restantes.length !== registros.length;
+}
+
+// Depois de salvar um cadastro/reserva, checa se a cabana já está ocupada
+// nesse período por OUTRO hóspede e avisa a equipe no WhatsApp. Nunca bloqueia
+// o registro — o dado entra, e um humano decide o que fazer.
+async function alertarConflitoDeReserva(novo) {
+  try {
+    const outros = loadRegistros().filter((r) => r.id !== novo.id);
+    const conflitos = conflitosDeUmaEstadia(novo, outros);
+    if (!conflitos.length) return [];
+
+    const nomeNovo = novo.tipo === 'cadastro' ? novo.dados?.hospede1?.nome : novo.dados?.hospede;
+    const linhas = [
+      '⚠️ *Possível conflito de reserva*',
+      '',
+      `Acabou de entrar: *${nomeNovo || '(sem nome)'}* — ${novo.dados?.cabana}`,
+      `${novo.dados?.checkin} → ${novo.dados?.checkout}`,
+      '',
+      'Já existe nessa cabana, com datas que se sobrepõem:',
+      ...conflitos.map((c) => `• ${c.hospede} — ${c.checkin} → ${c.checkout}`),
+      '',
+      'Confira no CRM antes de confirmar com o hóspede.',
+    ];
+    await notificarEquipe(linhas.join('\n'));
+    return conflitos;
+  } catch (err) {
+    console.error('Erro checando conflito de reserva:', err.message);
+    return [];
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -398,6 +432,24 @@ Se um campo não existir na mensagem, use uma string vazia "" ou lista vazia [].
   }
 }
 
+// Manda o mesmo aviso pra todos os números da equipe (STAFF_NUMBERS) e pra
+// proprietária, sem repetir se o número aparecer nos dois lugares.
+async function notificarEquipe(texto) {
+  const destinatarios = [...new Set([...STAFF_NUMBERS, OWNER_WHATSAPP_NUMBER].filter(Boolean))];
+  if (!destinatarios.length) {
+    console.warn('Nenhum número de equipe configurado — aviso só registrado no log.');
+    console.log(texto);
+    return;
+  }
+  await Promise.all(
+    destinatarios.map((numero) =>
+      sendWhatsAppMessage(numero, texto).catch((err) =>
+        console.error(`Não consegui avisar ${numero}:`, err.response?.data || err.message)
+      )
+    )
+  );
+}
+
 // Manda um aviso por WhatsApp pro responsável pelas reservas. Se der erro
 // (ex: fora da janela de 24h de conversa), só registra no log, sem travar o bot.
 async function notificarResponsavel(texto) {
@@ -473,8 +525,9 @@ app.post('/webhook/whatsapp', async (req, res) => {
     if (STAFF_NUMBERS.includes(from) && pareceConfirmacaoDeReserva(text)) {
       const dados = await extrairDadosEstruturados(text, 'reserva');
       if (dados) {
-        saveRegistro({ tipo: 'reserva', dados, textoOriginal: text });
+        const salvo = saveRegistro({ tipo: 'reserva', dados, textoOriginal: text });
         await sendWhatsAppMessage(from, `✅ Reserva registrada no sistema!\nHóspede: ${dados.hospede}\nCabana: ${dados.cabana}\nCheck-in: ${dados.checkin} → Check-out: ${dados.checkout}`);
+        if (salvo) await alertarConflitoDeReserva(salvo);
       } else {
         await sendWhatsAppMessage(from, '⚠️ Recebi a mensagem, mas não consegui extrair os dados automaticamente. Registre manualmente pelo CRM.');
       }
@@ -485,7 +538,8 @@ app.post('/webhook/whatsapp', async (req, res) => {
     if (pareceFormularioDeHospede(text)) {
       const dados = await extrairDadosEstruturados(text, 'cadastro');
       if (dados) {
-        saveRegistro({ tipo: 'cadastro', dados, textoOriginal: text, telefone: from });
+        const salvo = saveRegistro({ tipo: 'cadastro', dados, textoOriginal: text, telefone: from });
+        if (salvo) await alertarConflitoDeReserva(salvo);
         await encaminharParaEquipe(
           'whatsapp',
           from,
@@ -814,7 +868,9 @@ app.get('/admin/status', requireAdminKey, (req, res) => {
     OWNER_WHATSAPP_NUMBER_configurado: Boolean(process.env.OWNER_WHATSAPP_NUMBER),
     STAFF_NUMBERS_lista: STAFF_NUMBERS,
     DATA_DIR: process.env.DATA_DIR || '(não definido, usando padrão)',
+    BACKUP_DRIVE_configurado: backupConfigurado(),
     total_registros_salvos: loadRegistros().length,
+    total_conflitos_de_reserva: detectarConflitos(loadRegistros()).size,
   });
 });
 
@@ -858,7 +914,12 @@ app.get('/admin/testar-lembretes', requireAdminKey, async (req, res) => {
 // Lista registros, com filtros opcionais:
 // ?tipo=cadastro|reserva&cabana=Jasmim&busca=texto&status_pagamento=pago|parcial|pendente|atrasado
 app.get('/api/registros', requireAdminKey, (req, res) => {
-  let registros = loadRegistros();
+  const todos = loadRegistros();
+  // Conflitos são calculados sobre a base INTEIRA, não sobre a lista filtrada —
+  // senão um filtro por cabana esconderia justamente a reserva conflitante.
+  const mapaConflitos = detectarConflitos(todos);
+
+  let registros = todos;
   const { tipo, cabana, busca, status_pagamento } = req.query;
 
   if (tipo) registros = registros.filter((r) => r.tipo === tipo);
@@ -868,7 +929,7 @@ app.get('/api/registros', requireAdminKey, (req, res) => {
     registros = registros.filter((r) => normalize(JSON.stringify(r.dados || {})).includes(b));
   }
 
-  const enriquecidos = registros.map((r) => enrichRegistro(r));
+  const enriquecidos = registros.map((r) => ({ ...enrichRegistro(r), conflitos: mapaConflitos.get(r.id) || [] }));
   const filtrados = status_pagamento
     ? enriquecidos.filter((r) => r.dados?.status_pagamento === status_pagamento)
     : enriquecidos;
@@ -878,7 +939,9 @@ app.get('/api/registros', requireAdminKey, (req, res) => {
 
 // Resumo geral pro dashboard: ocupação atual, próximos check-ins/checkouts, financeiro.
 app.get('/api/dashboard', requireAdminKey, (req, res) => {
-  res.json(buildDashboard(loadRegistros(), CABANAS));
+  const registros = loadRegistros();
+  const mapaConflitos = detectarConflitos(registros);
+  res.json({ ...buildDashboard(registros, CABANAS), totalConflitos: mapaConflitos.size });
 });
 
 // Clientes agregados (cadastro + reserva casada por telefone/nome). ?busca=texto
@@ -939,6 +1002,41 @@ function amanhaISO() {
   return d.toISOString().slice(0, 10);
 }
 
+// Um campo "não preenchido" é o que está vazio OU ainda com o placeholder
+// "[EDITE: ...]" que vem no cabanas.json de exemplo. Enviar isso pro hóspede
+// na véspera do check-in seria pior do que não enviar nada.
+function campoPendente(valor) {
+  return !valor || /^\s*\[EDITE/i.test(String(valor));
+}
+
+function camposPendentesDaCabana(cabana) {
+  if (!cabana) return [];
+  return ['codigo_acesso', 'senha_wifi', 'recomendacoes'].filter((campo) => campoPendente(cabana[campo]));
+}
+
+// Monta o texto do lembrete. Se a cabana não foi encontrada em cabanas.json ou
+// tem campo pendente, cai numa versão genérica (sem dado quebrado) e devolve o
+// motivo, pra equipe ser avisada e completar manualmente.
+function montarMensagemLembrete(cabana, nomeHospede) {
+  const pendentes = camposPendentesDaCabana(cabana);
+
+  if (!cabana || pendentes.length) {
+    return {
+      mensagem: `Olá, ${nomeHospede}! 🌿 Estamos ansiosos pra te receber amanhã na Vila Pinheiro. Qualquer dúvida antes da chegada, é só chamar por aqui!`,
+      completa: false,
+      motivo: cabana
+        ? `cabana "${cabana.nome}" com campo(s) não preenchido(s) em cabanas.json: ${pendentes.join(', ')}`
+        : 'cabana não encontrada em cabanas.json',
+    };
+  }
+
+  return {
+    mensagem: `Olá, ${nomeHospede}! 🌿 Estamos ansiosos pra te receber amanhã na Vila Pinheiro, na cabana ${cabana.nome}.\n\n🔑 Código de acesso: ${cabana.codigo_acesso}\n📶 Wifi: ${cabana.senha_wifi}\n\n${cabana.recomendacoes}\n\nQualquer coisa, é só chamar por aqui!`,
+    completa: true,
+    motivo: null,
+  };
+}
+
 async function enviarLembretesDeVespera({ dryRun = false } = {}) {
   const amanha = amanhaISO();
   const registros = loadRegistros();
@@ -952,14 +1050,18 @@ async function enviarLembretesDeVespera({ dryRun = false } = {}) {
   for (const registro of candidatos) {
     const cabana = findCabana(registro.dados?.cabana);
     const nomeHospede = registro.dados?.hospede1?.nome?.split(' ')[0] || 'tudo bem';
-
-    const mensagem = cabana
-      ? `Olá, ${nomeHospede}! 🌿 Estamos ansiosos pra te receber amanhã na Vila Pinheiro, na cabana ${cabana.nome}.\n\n🔑 Código de acesso: ${cabana.codigo_acesso}\n📶 Wifi: ${cabana.senha_wifi}\n\n${cabana.recomendacoes}\n\nQualquer coisa, é só chamar por aqui!`
-      : `Olá, ${nomeHospede}! 🌿 Estamos ansiosos pra te receber amanhã na Vila Pinheiro. Qualquer dúvida antes da chegada, é só chamar por aqui!`;
+    const { mensagem, completa, motivo } = montarMensagemLembrete(cabana, nomeHospede);
 
     if (dryRun) {
-      resultado.push({ telefone: registro.telefone, hospede: nomeHospede, cabanaEncontrada: Boolean(cabana), mensagem });
+      resultado.push({ telefone: registro.telefone, hospede: nomeHospede, cabanaEncontrada: Boolean(cabana), completa, motivo, mensagem });
       continue;
+    }
+
+    if (!completa) {
+      console.warn(`⚠️ Lembrete genérico pra ${registro.telefone}: ${motivo}`);
+      await notificarResponsavel(
+        `⚠️ Lembrete de véspera enviado SEM os dados da cabana.\nHóspede: ${registro.dados?.hospede1?.nome || nomeHospede} (${registro.telefone})\nCabana informada: ${registro.dados?.cabana || '(não informada)'}\nMotivo: ${motivo}\n\nMande o código de acesso e o wifi manualmente pra esse hóspede e complete o cabanas.json.`
+      );
     }
 
     try {
@@ -977,8 +1079,75 @@ async function enviarLembretesDeVespera({ dryRun = false } = {}) {
 }
 
 
-// Roda todo dia às 10h (horário de Brasília)
+// ============================================================================
+// LEMBRETE DE PARCELA (para a EQUIPE, nunca direto pro hóspede)
+// Junta todas as parcelas atrasadas ou vencendo nos próximos dias numa única
+// mensagem por dia, e marca cada parcela como "já avisada" pra não repetir.
+// ============================================================================
+const DIAS_ANTECEDENCIA_PARCELA = Number(process.env.DIAS_ANTECEDENCIA_PARCELA || 3);
+
+async function enviarLembretesDeParcela({ dryRun = false } = {}) {
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const pendencias = listarParcelasParaLembrar(loadRegistros(), hojeISO, DIAS_ANTECEDENCIA_PARCELA);
+
+  if (!pendencias.length) return { hoje: hojeISO, total: 0, dryRun, mensagem: null };
+
+  const mensagem = montarMensagemCobranca(pendencias);
+  if (dryRun) return { hoje: hojeISO, total: pendencias.length, dryRun, pendencias, mensagem };
+
+  await notificarEquipe(mensagem);
+
+  // Só marca como avisado DEPOIS do envio dar certo — se o WhatsApp falhar,
+  // o lembrete volta amanhã em vez de sumir.
+  const porRegistro = new Map();
+  for (const p of pendencias) {
+    if (!porRegistro.has(p.registroId)) porRegistro.set(p.registroId, {});
+    porRegistro.get(p.registroId)[p.chave] = true;
+  }
+  for (const [registroId, chaves] of porRegistro) {
+    const atual = loadRegistros().find((r) => r.id === registroId);
+    if (atual) updateRegistro(registroId, { lembretesParcela: { ...(atual.lembretesParcela || {}), ...chaves } });
+  }
+
+  console.log(`✅ Lembrete de ${pendencias.length} parcela(s) enviado pra equipe`);
+  return { hoje: hojeISO, total: pendencias.length, dryRun, mensagem };
+}
+
+// ============================================================================
+// BACKUP DIÁRIO DO registros.json NO GOOGLE DRIVE
+// ============================================================================
+async function rodarBackup() {
+  const resultado = await fazerBackup(REGISTROS_PATH);
+  if (!resultado.ok && backupConfigurado()) {
+    await notificarResponsavel(`⚠️ O backup automático do CRM falhou hoje.\nMotivo: ${resultado.motivo}`);
+  }
+  return resultado;
+}
+
+app.get('/admin/testar-parcelas', requireAdminKey, async (req, res) => {
+  try {
+    res.json(await enviarLembretesDeParcela({ dryRun: req.query.dryRun === 'true' }));
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao testar lembrete de parcelas', detalhe: err.message });
+  }
+});
+
+app.get('/admin/testar-backup', requireAdminKey, async (req, res) => {
+  try {
+    res.json(await rodarBackup());
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao testar backup', detalhe: err.message });
+  }
+});
+
+// Lembrete de véspera: todo dia às 10h (horário de Brasília)
 cron.schedule('0 10 * * *', enviarLembretesDeVespera, { timezone: 'America/Sao_Paulo' });
+
+// Cobrança de parcelas: todo dia às 9h, antes do expediente
+cron.schedule('0 9 * * *', enviarLembretesDeParcela, { timezone: 'America/Sao_Paulo' });
+
+// Backup no Drive: todo dia às 3h da manhã
+cron.schedule('0 3 * * *', rodarBackup, { timezone: 'America/Sao_Paulo' });
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);

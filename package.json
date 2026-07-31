@@ -5,13 +5,16 @@
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "validar": "node scripts/validar-json.js",
+    "prestart": "node scripts/validar-json.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
     "axios": "^1.7.7",
     "dotenv": "^16.4.5",
-    "node-cron": "^3.0.3",
-    "form-data": "^4.0.0"
+    "express": "^4.19.2",
+    "form-data": "^4.0.0",
+    "googleapis": "^144.0.0",
+    "node-cron": "^3.0.3"
   }
 }
