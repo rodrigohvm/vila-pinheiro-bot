@@ -239,6 +239,22 @@
   .pag-badge.pendente { background: #EFE7D3; color: var(--muted); }
   .pag-badge.atrasado { background: #F3E2D6; color: var(--clay); }
 
+  /* ---------- Conflito de reserva ---------- */
+  .conflito-badge {
+    display: inline-block; margin-left: 6px; cursor: help;
+    font-size: 12px; color: var(--clay); font-weight: 600;
+  }
+  tr.tem-conflito td { background: #FBEFE7; }
+  tr.tem-conflito:hover td { background: #F6E3D6; }
+  .conflito-aviso {
+    background: #FBEFE7; border: 1px solid var(--clay-soft); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 6px; font-size: 13px; color: var(--ink);
+  }
+  .conflito-aviso strong { color: var(--clay); }
+  .conflito-aviso ul { margin: 8px 0 0; padding-left: 18px; }
+  .kpi-card.alerta { border-color: var(--clay-soft); }
+  .kpi-card.alerta .kpi-value { color: var(--clay); }
+
   /* ---------- Parcelas no modal ---------- */
   .parcelas-lista { margin-top: 6px; }
   .parcela-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
@@ -303,6 +319,11 @@
           <div class="kpi-card">
             <div class="kpi-label">Total confirmado</div>
             <div class="kpi-value" id="kpi-total-confirmado">—</div>
+          </div>
+          <div class="kpi-card" id="kpi-card-conflitos">
+            <div class="kpi-label">Conflitos de reserva</div>
+            <div class="kpi-value" id="kpi-conflitos">—</div>
+            <div class="kpi-sub" id="kpi-conflitos-sub"></div>
           </div>
         </div>
 
@@ -412,6 +433,7 @@
   <div id="modal-backdrop">
     <div id="modal">
       <h3>Editar registro</h3>
+      <div id="edit-conflito" class="conflito-aviso" style="display:none;"></div>
       <label>Hóspede</label>
       <input id="edit-hospede" type="text" />
       <label>Cabana</label>
@@ -538,6 +560,13 @@
     document.getElementById('kpi-total-pendente').textContent = formatBRL(dash.financeiro.totalPendente);
     document.getElementById('kpi-total-confirmado').textContent = formatBRL(dash.financeiro.totalConfirmado);
 
+    const totalConflitos = dash.totalConflitos || 0;
+    document.getElementById('kpi-conflitos').textContent = totalConflitos;
+    document.getElementById('kpi-card-conflitos').classList.toggle('alerta', totalConflitos > 0);
+    document.getElementById('kpi-conflitos-sub').textContent = totalConflitos
+      ? 'Veja os registros marcados na aba Reservas'
+      : 'Nenhuma sobreposição de datas';
+
     const ocupacaoEl = document.getElementById('dash-ocupacao-lista');
     ocupacaoEl.innerHTML = dash.ocupacaoAtual.length
       ? dash.ocupacaoAtual.map((o) => `<li><span>${o.cabana} — ${o.hospede}</span><span class="d-data">até ${o.checkout}</span></li>`).join('')
@@ -602,10 +631,15 @@
       const tr = document.createElement('tr');
       const valor = r.tipo === 'reserva' ? (r.dados?.valor_total || '—') : '—';
       const statusPag = r.tipo === 'reserva' ? badgePagamento(r.dados?.status_pagamento) : '—';
+      const conflitos = r.conflitos || [];
+      if (conflitos.length) tr.className = 'tem-conflito';
+      const aviso = conflitos.length
+        ? `<span class="conflito-badge" title="${escaparAtributo(resumoConflitos(conflitos))}">⚠️</span>`
+        : '';
       tr.innerHTML = `
         <td><span class="tag ${r.tipo}">${r.tipo === 'cadastro' ? 'Cadastro' : 'Reserva'}</span></td>
         <td>${nomeHospedeDe(r)}</td>
-        <td>${r.dados?.cabana || '—'}</td>
+        <td>${r.dados?.cabana || '—'}${aviso}</td>
         <td class="mono">${r.dados?.checkin || '—'}</td>
         <td class="mono">${r.dados?.checkout || '—'}</td>
         <td class="mono">${valor}</td>
@@ -615,6 +649,14 @@
       `;
       tbody.appendChild(tr);
     });
+  }
+
+  function resumoConflitos(conflitos) {
+    return 'Mesma cabana, datas sobrepostas:\n' + conflitos.map((c) => `• ${c.hospede}: ${c.checkin} → ${c.checkout}`).join('\n');
+  }
+
+  function escaparAtributo(texto) {
+    return String(texto).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   }
 
   function badgePagamento(status) {
@@ -632,6 +674,17 @@
     document.getElementById('edit-checkin').value = r.dados?.checkin || '';
     document.getElementById('edit-checkout').value = r.dados?.checkout || '';
     document.getElementById('edit-json').value = JSON.stringify(r.dados, null, 2);
+
+    const conflitoEl = document.getElementById('edit-conflito');
+    const conflitos = r.conflitos || [];
+    if (conflitos.length) {
+      conflitoEl.style.display = 'block';
+      conflitoEl.innerHTML = `<strong>⚠️ Conflito de reserva</strong> — a cabana <strong>${r.dados?.cabana || ''}</strong> já tem outra estadia nesse período:
+        <ul>${conflitos.map((c) => `<li>${c.hospede} — ${c.checkin} → ${c.checkout}</li>`).join('')}</ul>`;
+    } else {
+      conflitoEl.style.display = 'none';
+      conflitoEl.innerHTML = '';
+    }
 
     const reservaWrapper = document.getElementById('edit-reserva-wrapper');
     if (r.tipo === 'reserva') {
