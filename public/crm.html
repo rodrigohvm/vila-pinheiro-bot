@@ -204,6 +204,8 @@
     text-overflow: ellipsis;
     cursor: default;
   }
+  .cal-bar.conflito { box-shadow: inset 0 0 0 2px #B3261E; }
+  .cal-bar.divergencia { box-shadow: inset 0 0 0 2px #D9A441; }
 
   .legend { display: flex; gap: 16px; margin-top: 18px; font-size: 12px; color: var(--muted); align-items: center; flex-wrap: wrap; }
   .legend .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: middle; }
@@ -246,6 +248,8 @@
   }
   tr.tem-conflito td { background: #FBEFE7; }
   tr.tem-conflito:hover td { background: #F6E3D6; }
+  tr.tem-divergencia td { background: #FAF3E0; }
+  tr.tem-divergencia:hover td { background: #F4EBD2; }
   .conflito-aviso {
     background: #FBEFE7; border: 1px solid var(--clay-soft); border-radius: 8px;
     padding: 12px 14px; margin-bottom: 6px; font-size: 13px; color: var(--ink);
@@ -254,6 +258,23 @@
   .conflito-aviso ul { margin: 8px 0 0; padding-left: 18px; }
   .kpi-card.alerta { border-color: var(--clay-soft); }
   .kpi-card.alerta .kpi-value { color: var(--clay); }
+
+  /* ---------- Estágio da estadia ---------- */
+  .estagio { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .estagio .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .estagio.aguardando .dot { background: #D9A441; }
+  .estagio.confirmada .dot { background: #4A7FA5; }
+  .estagio.paga .dot { background: var(--moss); }
+  .sinais { display: inline-flex; gap: 5px; margin-left: 6px; }
+  .sinais span { cursor: help; font-size: 12px; }
+  .sub-hospede { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .actions .sem-registro { color: var(--muted); cursor: default; }
+  .actions a.chip {
+    display: inline-block; border: 1px solid var(--line); border-radius: 999px;
+    padding: 2px 9px; margin-right: 6px; font-size: 11px; text-decoration: none;
+  }
+  .actions a.chip:hover { background: var(--moss-pale); text-decoration: none; }
+  .legenda-estagios { display: flex; gap: 18px; flex-wrap: wrap; margin: 0 0 16px; font-size: 12px; color: var(--muted); }
 
   /* ---------- Parcelas no modal ---------- */
   .parcelas-lista { margin-top: 6px; }
@@ -321,7 +342,7 @@
             <div class="kpi-value" id="kpi-total-confirmado">—</div>
           </div>
           <div class="kpi-card" id="kpi-card-conflitos">
-            <div class="kpi-label">Conflitos de reserva</div>
+            <div class="kpi-label">Overbooking</div>
             <div class="kpi-value" id="kpi-conflitos">—</div>
             <div class="kpi-sub" id="kpi-conflitos-sub"></div>
           </div>
@@ -350,16 +371,17 @@
           <span class="count" id="count-reservas"></span>
         </div>
         <div class="filters">
-          <input type="text" id="f-busca" placeholder="Buscar por nome, telefone..." oninput="carregarRegistros()" />
-          <select id="f-tipo" onchange="carregarRegistros()">
-            <option value="">Todos os tipos</option>
-            <option value="cadastro">Cadastro de hóspede</option>
-            <option value="reserva">Confirmação de reserva</option>
+          <input type="text" id="f-busca" placeholder="Buscar por nome, telefone..." oninput="carregarEstadias()" />
+          <select id="f-estagio" onchange="carregarEstadias()">
+            <option value="">Todos os estágios</option>
+            <option value="aguardando">🟡 Aguardando confirmação</option>
+            <option value="confirmada">🔵 Confirmada</option>
+            <option value="paga">🟢 Paga</option>
           </select>
-          <select id="f-cabana" onchange="carregarRegistros()">
+          <select id="f-cabana" onchange="carregarEstadias()">
             <option value="">Todas as cabanas</option>
           </select>
-          <select id="f-pagamento" onchange="carregarRegistros()">
+          <select id="f-pagamento" onchange="carregarEstadias()">
             <option value="">Todo status de pagamento</option>
             <option value="pago">Pago</option>
             <option value="parcial">Parcial</option>
@@ -367,15 +389,26 @@
             <option value="atrasado">Atrasado</option>
           </select>
         </div>
+        <div class="legenda-estagios">
+          <span><span class="estagio aguardando"><span class="dot"></span>Aguardando confirmação</span> — só o cadastro do hóspede chegou</span>
+          <span><span class="estagio confirmada"><span class="dot"></span>Confirmada</span> — a equipe já registrou a reserva</span>
+          <span><span class="estagio paga"><span class="dot"></span>Paga</span> — pelo menos uma parcela recebida</span>
+          <span>🔴 overbooking · 🟠 datas divergentes · 🧾 registro duplicado</span>
+        </div>
         <table>
           <thead>
             <tr>
-              <th>Tipo</th><th>Hóspede</th><th>Cabana</th><th>Check-in</th><th>Check-out</th><th>Valor</th><th>Pagamento</th><th>Telefone</th><th></th>
+              <th>Estágio</th><th>Hóspede</th><th>Cabana</th><th>Check-in</th><th>Check-out</th><th>Valor</th><th>Pagamento</th><th>Telefone</th><th>Registros</th>
             </tr>
           </thead>
           <tbody id="tabela-registros"></tbody>
         </table>
-        <div id="reservas-empty" class="empty-state" style="display:none;">Nenhum registro encontrado ainda. Eles aparecem aqui automaticamente conforme os hóspedes preenchem o cadastro pelo WhatsApp.</div>
+        <div id="reservas-empty" class="empty-state" style="display:none;">Nenhuma estadia encontrada ainda. Elas aparecem aqui automaticamente conforme os hóspedes preenchem o cadastro pelo WhatsApp.</div>
+        <p style="color:var(--muted); font-size:12px; margin-top:14px;">
+          Cada linha é uma <strong>estadia</strong> — o cadastro do hóspede e a confirmação da equipe aparecem juntos.
+          Na coluna “Registros” você escolhe qual dos dois quer editar. 🔔 marca o registro que dispara o lembrete de véspera
+          (é sempre o do cadastro, o único com telefone) e 💰 o que gera a cobrança de parcelas.
+        </p>
       </section>
 
       <!-- ===================== VIEW: CLIENTES ===================== -->
@@ -469,7 +502,8 @@
 
 <script>
   let CHAVE = localStorage.getItem('vp_admin_key') || '';
-  let REGISTROS = [];
+  let ESTADIAS = [];
+  let REGISTROS_POR_ID = {};
   let CLIENTES = [];
   let CABANAS = []; // [{nome, cor}]
   let EDITANDO_ID = null;
@@ -503,7 +537,7 @@
     document.getElementById('app').classList.add('visible');
     preencherFiltroCabanas();
     carregarDashboard();
-    carregarRegistros();
+    carregarEstadias();
     carregarClientes();
     montarLegenda();
     document.getElementById('ics-link').value = `${location.origin}/api/calendario.ics?key=${encodeURIComponent(CHAVE)}`;
@@ -561,11 +595,14 @@
     document.getElementById('kpi-total-confirmado').textContent = formatBRL(dash.financeiro.totalConfirmado);
 
     const totalConflitos = dash.totalConflitos || 0;
+    const totalDivergencias = dash.totalDivergencias || 0;
     document.getElementById('kpi-conflitos').textContent = totalConflitos;
-    document.getElementById('kpi-card-conflitos').classList.toggle('alerta', totalConflitos > 0);
+    document.getElementById('kpi-card-conflitos').classList.toggle('alerta', totalConflitos > 0 || totalDivergencias > 0);
     document.getElementById('kpi-conflitos-sub').textContent = totalConflitos
-      ? 'Veja os registros marcados na aba Reservas'
-      : 'Nenhuma sobreposição de datas';
+      ? `Cabana ocupada 2x no mesmo período${totalDivergencias ? ` · + ${totalDivergencias} com datas divergentes` : ''}`
+      : totalDivergencias
+        ? `${totalDivergencias} estadia(s) com datas divergentes — confira na aba Reservas`
+        : 'Nenhuma sobreposição de datas';
 
     const ocupacaoEl = document.getElementById('dash-ocupacao-lista');
     ocupacaoEl.innerHTML = dash.ocupacaoAtual.length
@@ -604,55 +641,94 @@
     navigator.clipboard?.writeText(input.value);
   }
 
-  // ---------------- Reservas ----------------
-  async function carregarRegistros() {
+  // ---------------- Reservas (estadias fundidas) ----------------
+  async function carregarEstadias() {
     const params = new URLSearchParams();
     const busca = document.getElementById('f-busca').value;
-    const tipo = document.getElementById('f-tipo').value;
+    const estagio = document.getElementById('f-estagio').value;
     const cabana = document.getElementById('f-cabana').value;
     const statusPagamento = document.getElementById('f-pagamento').value;
     if (busca) params.set('busca', busca);
-    if (tipo) params.set('tipo', tipo);
+    if (estagio) params.set('estagio', estagio);
     if (cabana) params.set('cabana', cabana);
     if (statusPagamento) params.set('status_pagamento', statusPagamento);
 
-    const res = await authFetch('/api/registros?' + params.toString());
-    REGISTROS = await res.json();
+    const res = await authFetch('/api/estadias?' + params.toString());
+    ESTADIAS = await res.json();
+
+    // O modal edita o registro CRU (cadastro ou reserva), que vem dentro da estadia.
+    REGISTROS_POR_ID = {};
+    ESTADIAS.forEach((e) => (e.registros || []).forEach((r) => { REGISTROS_POR_ID[r.id] = { ...r, conflitos: e.alertas || [] }; }));
     renderizarTabela();
+  }
+
+  function badgeEstagio(e) {
+    return `<span class="estagio ${e.estagio}"><span class="dot"></span>${e.estagio_label}</span>`;
+  }
+
+  function sinaisDaEstadia(e) {
+    const sinais = [];
+    if (e.conflitos?.length) {
+      sinais.push(`<span title="${escaparAtributo('OVERBOOKING — a cabana não pode receber duas estadias ao mesmo tempo:\n' + listaDeAlertas(e.conflitos))}">🔴</span>`);
+    }
+    if (e.divergencias?.length) {
+      sinais.push(`<span title="${escaparAtributo('Mesmo hóspede, mesma cabana, datas que não batem entre os registros (provável erro de digitação):\n' + listaDeAlertas(e.divergencias))}">🟠</span>`);
+    }
+    if (e.duplicados?.length) sinais.push(`<span title="${escaparAtributo(e.duplicados.length + ' registro(s) duplicado(s) desta mesma estadia — confira e exclua os repetidos')}">🧾</span>`);
+    return sinais.length ? `<span class="sinais">${sinais.join('')}</span>` : '';
+  }
+
+  function acoesDaEstadia(e) {
+    const chips = [];
+    if (e.cadastroId) {
+      const lembrete = e.automacoes?.lembreteVespera;
+      const marca = lembrete?.apto ? (lembrete.enviado ? ' 🔔✓' : ' 🔔') : '';
+      const dica = lembrete?.apto
+        ? (lembrete.enviado ? 'Lembrete de véspera já enviado a partir deste registro' : 'O lembrete de véspera sai deste registro')
+        : 'Sem telefone ou sem data de check-in — o lembrete de véspera não vai sair';
+      chips.push(`<a class="chip" title="${escaparAtributo(dica)}" onclick="abrirModal('${e.cadastroId}')">Cadastro${marca}</a>`);
+    }
+    if (e.reservaId) {
+      const marca = e.automacoes?.cobrancaParcela ? ' 💰' : '';
+      const dica = e.automacoes?.cobrancaParcela
+        ? 'As parcelas deste registro entram na cobrança automática'
+        : 'Reserva sem parcelas cadastradas';
+      chips.push(`<a class="chip" title="${escaparAtributo(dica)}" onclick="abrirModal('${e.reservaId}')">Reserva${marca}</a>`);
+    }
+    (e.duplicados || []).forEach((d, i) =>
+      chips.push(`<a class="chip" title="Registro duplicado desta estadia" onclick="abrirModal('${d.id}')">${d.tipo === 'cadastro' ? 'Cadastro' : 'Reserva'} (cópia ${i + 1})</a>`)
+    );
+    return chips.join('') || '<span class="sem-registro">—</span>';
   }
 
   function renderizarTabela() {
     const tbody = document.getElementById('tabela-registros');
     tbody.innerHTML = '';
-    document.getElementById('count-reservas').textContent = REGISTROS.length + ' registro(s)';
-    document.getElementById('reservas-empty').style.display = REGISTROS.length ? 'none' : 'block';
+    document.getElementById('count-reservas').textContent = ESTADIAS.length + ' estadia(s)';
+    document.getElementById('reservas-empty').style.display = ESTADIAS.length ? 'none' : 'block';
 
-    REGISTROS.forEach((r) => {
+    ESTADIAS.forEach((e) => {
       const tr = document.createElement('tr');
-      const valor = r.tipo === 'reserva' ? (r.dados?.valor_total || '—') : '—';
-      const statusPag = r.tipo === 'reserva' ? badgePagamento(r.dados?.status_pagamento) : '—';
-      const conflitos = r.conflitos || [];
-      if (conflitos.length) tr.className = 'tem-conflito';
-      const aviso = conflitos.length
-        ? `<span class="conflito-badge" title="${escaparAtributo(resumoConflitos(conflitos))}">⚠️</span>`
-        : '';
+      if (e.conflitos?.length) tr.className = 'tem-conflito';
+      else if (e.divergencias?.length) tr.className = 'tem-divergencia';
+      const semCadastro = !e.cadastroId ? '<span class="sub-hospede">sem cadastro do hóspede (sem telefone)</span>' : '';
       tr.innerHTML = `
-        <td><span class="tag ${r.tipo}">${r.tipo === 'cadastro' ? 'Cadastro' : 'Reserva'}</span></td>
-        <td>${nomeHospedeDe(r)}</td>
-        <td>${r.dados?.cabana || '—'}${aviso}</td>
-        <td class="mono">${r.dados?.checkin || '—'}</td>
-        <td class="mono">${r.dados?.checkout || '—'}</td>
-        <td class="mono">${valor}</td>
-        <td>${statusPag}</td>
-        <td class="mono">${r.telefone || '—'}</td>
-        <td class="actions"><a onclick="abrirModal('${r.id}')">Editar</a></td>
+        <td>${badgeEstagio(e)}</td>
+        <td>${e.hospede}${semCadastro}</td>
+        <td>${e.cabana || '—'}${sinaisDaEstadia(e)}</td>
+        <td class="mono">${e.checkin || '—'}</td>
+        <td class="mono">${e.checkout || '—'}</td>
+        <td class="mono">${e.valor_total || '—'}</td>
+        <td>${e.status_pagamento ? badgePagamento(e.status_pagamento) : '—'}</td>
+        <td class="mono">${e.telefone || '—'}</td>
+        <td class="actions">${acoesDaEstadia(e)}</td>
       `;
       tbody.appendChild(tr);
     });
   }
 
-  function resumoConflitos(conflitos) {
-    return 'Mesma cabana, datas sobrepostas:\n' + conflitos.map((c) => `• ${c.hospede}: ${c.checkin} → ${c.checkout}`).join('\n');
+  function listaDeAlertas(alertas) {
+    return alertas.map((c) => `• ${c.hospede}: ${c.checkin} → ${c.checkout}`).join('\n');
   }
 
   function escaparAtributo(texto) {
@@ -666,7 +742,7 @@
   }
 
   function abrirModal(id) {
-    const r = REGISTROS.find((x) => x.id === id);
+    const r = REGISTROS_POR_ID[id];
     if (!r) return;
     EDITANDO_ID = id;
     document.getElementById('edit-hospede').value = nomeHospedeDe(r);
@@ -676,11 +752,21 @@
     document.getElementById('edit-json').value = JSON.stringify(r.dados, null, 2);
 
     const conflitoEl = document.getElementById('edit-conflito');
-    const conflitos = r.conflitos || [];
-    if (conflitos.length) {
+    const alertas = r.conflitos || [];
+    const over = alertas.filter((c) => c.motivo === 'overbooking');
+    const diverg = alertas.filter((c) => c.motivo === 'divergencia');
+    if (alertas.length) {
       conflitoEl.style.display = 'block';
-      conflitoEl.innerHTML = `<strong>⚠️ Conflito de reserva</strong> — a cabana <strong>${r.dados?.cabana || ''}</strong> já tem outra estadia nesse período:
-        <ul>${conflitos.map((c) => `<li>${c.hospede} — ${c.checkin} → ${c.checkout}</li>`).join('')}</ul>`;
+      const blocos = [];
+      if (over.length) {
+        blocos.push(`<strong>🔴 Overbooking</strong> — a cabana <strong>${r.dados?.cabana || ''}</strong> já está ocupada nesse período:
+          <ul>${over.map((c) => `<li>${c.hospede} — ${c.checkin} → ${c.checkout}</li>`).join('')}</ul>`);
+      }
+      if (diverg.length) {
+        blocos.push(`<strong>🟠 Datas divergentes</strong> — o mesmo hóspede aparece com outras datas na mesma cabana. Provável erro de digitação: corrija um dos dois registros pra virar uma estadia só.
+          <ul>${diverg.map((c) => `<li>${c.hospede} — ${c.checkin} → ${c.checkout}</li>`).join('')}</ul>`);
+      }
+      conflitoEl.innerHTML = blocos.join('<hr style="border:none;border-top:1px solid var(--line);margin:10px 0;">');
     } else {
       conflitoEl.style.display = 'none';
       conflitoEl.innerHTML = '';
@@ -752,7 +838,7 @@
 
     await authFetch('/api/registros/' + EDITANDO_ID, { method: 'PATCH', body: JSON.stringify({ dados }) });
     fecharModal();
-    carregarRegistros();
+    carregarEstadias();
     carregarClientes();
     renderizarCalendario();
   }
@@ -762,7 +848,7 @@
     if (!confirm('Excluir esse registro permanentemente?')) return;
     await authFetch('/api/registros/' + EDITANDO_ID, { method: 'DELETE' });
     fecharModal();
-    carregarRegistros();
+    carregarEstadias();
     carregarClientes();
     renderizarCalendario();
   }
@@ -868,8 +954,8 @@
     const nomesMes = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
     document.getElementById('cal-mes-label').textContent = `${nomesMes[MES_ATUAL]} de ${ANO_ATUAL}`;
 
-    const res = await authFetch('/api/registros');
-    const todos = (await res.json()).filter((r) => r.checkin_iso && r.checkout_iso);
+    const res = await authFetch('/api/estadias');
+    const todos = (await res.json()).filter((e) => e.checkin_iso && e.checkout_iso);
 
     const primeiroDiaMes = new Date(ANO_ATUAL, MES_ATUAL, 1);
     const ultimoDiaMes = new Date(ANO_ATUAL, MES_ATUAL + 1, 0);
@@ -900,6 +986,7 @@
         .map((r) => {
           const checkin = isoParaData(r.checkin_iso);
           const ultimoDiaOcupado = new Date(isoParaData(r.checkout_iso));
+
           ultimoDiaOcupado.setDate(ultimoDiaOcupado.getDate() - 1);
           if (ultimoDiaOcupado < weekStart || checkin > weekEnd) return null;
           const inicioCol = Math.max(0, Math.round((checkin - weekStart) / 86400000));
@@ -938,16 +1025,16 @@
 
       eventosNaSemana.forEach((ev) => {
         const r = ev.registro;
-        const nomeHospede = nomeHospedeDe(r);
+        const nomeHospede = r.hospede || '(sem nome)';
         const telefone = r.telefone || 'sem telefone cadastrado';
         const bar = document.createElement('div');
-        bar.className = 'cal-bar';
+        bar.className = 'cal-bar' + (r.conflitos?.length ? ' conflito' : r.divergencias?.length ? ' divergencia' : '');
         bar.style.left = (ev.inicioCol * (100 / 7)) + '%';
         bar.style.width = ((ev.fimCol - ev.inicioCol + 1) * (100 / 7) - 1) + '%';
         bar.style.top = (ev.raia * 24) + 'px';
-        bar.style.background = corDaCabana(r.dados?.cabana);
-        bar.textContent = `${r.dados?.cabana || 'Cabana'} — ${nomeHospede}`;
-        bar.title = `${nomeHospede} • ${telefone}`;
+        bar.style.background = corDaCabana(r.cabana);
+        bar.textContent = `${r.cabana || 'Cabana'} — ${nomeHospede}`;
+        bar.title = `${nomeHospede} • ${telefone}\n${r.estagio_label}${r.conflitos?.length ? ' • 🔴 overbooking' : ''}${r.divergencias?.length ? ' • 🟠 datas divergentes' : ''}`;
         barsEl.appendChild(bar);
       });
 
