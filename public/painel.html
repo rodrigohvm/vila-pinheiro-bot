@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vila Pinheiro — Painel do bot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1E2A20;
+    --paper: #EFE7D3;
+    --paper-raised: #F8F3E6;
+    --line: #D8CDAF;
+    --clay: #A6522F;
+    --clay-soft: #C97C55;
+    --moss: #6E7F5C;
+    --moss-soft: #9DAE8B;
+    --moss-pale: #E3E8DA;
+    --muted: #7A7266;
+    --alerta: #B3261E;
+    --aviso: #8A6D1F;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Work Sans', sans-serif;
+    font-size: 14px;
+  }
+  h1, h2, h3, .brand { font-family: 'Fraunces', serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  button, input, textarea, select { font-family: inherit; font-size: 14px; color: var(--ink); }
+
+  /* ---------- Login ---------- */
+  #login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+  #login-screen .brand { font-size: 28px; font-weight: 600; color: var(--clay); }
+  #login-screen p { color: var(--muted); margin: 0 0 8px; }
+  #login-screen input {
+    font-family: 'JetBrains Mono', monospace; padding: 10px 14px; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--paper-raised); width: 260px;
+  }
+  .btn {
+    background: var(--clay); color: #fff; border: none; padding: 10px 18px;
+    border-radius: 6px; font-weight: 500; cursor: pointer;
+  }
+  .btn:hover { background: var(--clay-soft); }
+  .btn:disabled { background: var(--moss-soft); cursor: not-allowed; }
+  .btn-outline {
+    background: none; border: 1px solid var(--line); color: var(--ink);
+    padding: 9px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  .btn-outline:hover { background: var(--moss-pale); }
+  #login-error { color: var(--clay); font-size: 13px; min-height: 18px; }
+
+  /* ---------- Shell ---------- */
+  #app { display: none; min-height: 100vh; }
+  #app.visible { display: block; }
+  header {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+    padding: 26px 40px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  header a { color: var(--clay); text-decoration: none; font-size: 13px; }
+  header a:hover { text-decoration: underline; }
+
+  .colunas { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 32px; padding: 28px 40px 60px; align-items: start; }
+  @media (max-width: 900px) { .colunas { grid-template-columns: 1fr; } }
+
+  /* ---------- Trilha (fluxograma) ---------- */
+  .trilha { position: relative; padding-left: 28px; max-width: 640px; }
+  .trilha::before {
+    content: ''; position: absolute; left: 7px; top: 10px; bottom: 34px;
+    width: 2px; background: var(--moss-soft);
+  }
+  .etapa { position: relative; margin-bottom: 14px; }
+  .etapa::before {
+    content: ''; position: absolute; left: -25px; top: 20px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--paper); border: 2px solid var(--moss);
+  }
+  .etapa.entrada::before { background: var(--moss); }
+  .condicao {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin: 0 0 5px 2px;
+  }
+  .no {
+    width: 100%; text-align: left; background: var(--paper-raised);
+    border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .no:hover { border-color: var(--clay-soft); transform: translateX(2px); }
+  .no:focus-visible { outline: 2px solid var(--clay); outline-offset: 2px; }
+  .no.selecionado { border-color: var(--clay); box-shadow: inset 0 0 0 1px var(--clay); }
+  .no .titulo { font-family: 'Fraunces', serif; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .no .desc { color: var(--muted); font-size: 12.5px; margin-top: 4px; line-height: 1.45; }
+  .no .preview {
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--ink);
+    background: var(--moss-pale); border-radius: 6px; padding: 7px 9px; margin-top: 9px;
+    white-space: pre-wrap; max-height: 62px; overflow: hidden;
+  }
+  .pill {
+    font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px; background: var(--moss-pale); color: var(--moss);
+  }
+  .pill.editar { background: #F3E2D6; color: var(--clay); }
+  .pill.automatico { background: var(--paper); color: var(--muted); border: 1px solid var(--line); }
+  .grupo-titulo {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted);
+    margin: 34px 0 14px -28px;
+  }
+
+  /* ---------- Editor ---------- */
+  .editor {
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px; position: sticky; top: 24px;
+  }
+  .editor h2 { margin: 0 0 4px; font-size: 19px; font-weight: 600; }
+  .editor .origem { font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+  .editor label { display: block; font-size: 12px; color: var(--muted); margin: 14px 0 5px; }
+  .editor input[type="text"], .editor textarea {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--paper); font-size: 13px;
+  }
+  .editor textarea { min-height: 110px; line-height: 1.5; resize: vertical; }
+  .editor input:focus, .editor textarea:focus { outline: 2px solid var(--clay-soft); outline-offset: -1px; }
+  .cabana-card { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; margin-bottom: 12px; }
+  .cabana-card .cabeca { display: flex; align-items: center; gap: 9px; }
+  .cabana-card .swatch { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; }
+  .cabana-card .nome { font-family: 'Fraunces', serif; font-weight: 600; font-size: 15px; }
+  .contador { font-size: 11px; color: var(--muted); text-align: right; margin-top: 3px; }
+  .contador.perto { color: var(--aviso); }
+  .rodape-editor { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 20px; }
+  .aviso-box, .erro-box {
+    border-radius: 8px; padding: 10px 12px; font-size: 12.5px; margin-top: 14px; line-height: 1.5;
+  }
+  .erro-box { background: #FBEFE7; border: 1px solid var(--clay-soft); color: var(--alerta); }
+  .aviso-box { background: #F8F0DA; border: 1px solid #E0CE9B; color: var(--aviso); }
+  .erro-box ul, .aviso-box ul { margin: 6px 0 0; padding-left: 17px; }
+  .salvo { color: var(--moss); font-size: 12.5px; }
+  .vazio { color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .leitura {
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; white-space: pre-wrap;
+    background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 12px; line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="brand">Vila Pinheiro</div>
+  <p>Painel do bot — informe a chave de acesso</p>
+  <input type="password" id="login-key" placeholder="Chave de acesso" />
+  <button class="btn" onclick="fazerLogin()">Entrar</button>
+  <div id="login-error"></div>
+</div>
+
+<div id="app">
+  <header>
+    <div>
+      <h1>Painel do bot</h1>
+      <div class="sub">Clique num balão pra ver e editar o que o bot responde. O que você salvar vale na próxima mensagem.</div>
+    </div>
+    <a href="/crm">Ir para o CRM →</a>
+  </header>
+
+  <div class="colunas">
+    <div>
+      <div class="trilha" id="trilha">
+        <div class="etapa entrada">
+          <div class="condicao">O hóspede manda uma mensagem</div>
+          <button class="no" data-no="entrada" type="button">
+            <div class="titulo">Chegou mensagem no WhatsApp</div>
+            <div class="desc">O bot testa as opções abaixo em ordem e para na primeira que combinar.</div>
+          </button>
+        </div>
+
+        <div class="etapa">
+          <div class="condicao">Se for a equipe colando uma confirmação</div>
+          <button class="no" data-no="reserva" type="button">
+            <div class="titulo">Reserva vira registro no CRM <span class="pill automatico">automático</span></div>
+            <div class="desc">Lê hóspede, cabana, datas, valor e parcelas. Só funciona para os números da equipe.</div>
+          </button>
+        </div>
+
+        <div class="etapa">
+          <div class="condicao">Se for o formulário preenchido</div>
+          <button class="no" data-no="formulario" type="button">
+            <div class="titulo">Cadastro do hóspede</div>
+            <div class="desc" data-desc></div>
+            <div class="preview" data-preview></div>
+          </button>
+        </div>
+
+        <div class="etapa">
+          <div class="condicao">Se bater com uma palavra-chave</div>
+          <button class="no" data-no="menu" type="button">
+            <div class="titulo">Menu de opções</div>
+            <div class="desc" data-desc></div>
+            <div class="preview" data-preview></div>
+          </button>
+        </div>
+
+        <div class="etapa">
+          <div class="condicao">Se for o primeiro contato desse número</div>
+          <button class="no" data-no="boas-vindas" type="button">
+            <div class="titulo">Boas-vindas <span class="pill editar">editável</span></div>
+            <div class="desc" data-desc></div>
+            <div class="preview" data-preview></div>
+          </button>
+        </div>
+
+        <div class="etapa">
+          <div class="condicao">Logo em seguida</div>
+          <button class="no" data-no="pdfs-boas-vindas" type="button">
+            <div class="titulo">PDFs de apresentação</div>
+            <div class="desc" data-desc></div>
+            <div class="preview" data-preview></div>
+          </button>
+        </div>
+
+        <div class="etapa">
+          <div class="condicao">Se nada acima combinar</div>
+          <button class="no" data-no="equipe" type="button">
+            <div class="titulo">Encaminha pra equipe</div>
+            <div class="desc" data-desc></div>
+            <div class="preview" data-preview></div>
+          </button>
+        </div>
+
+        <div class="grupo-titulo">Sozinho, sem ninguém escrever</div>
+
+        <div class="etapa">
+          <div class="condicao">Todo dia às 10h</div>
+          <button class="no" data-no="lembrete-vespera" type="button">
+            <div class="titulo">Lembrete da véspera</div>
+            <div class="desc" data-desc></div>
+          </button>
+        </div>
+
+        <div class="etapa">
+          <div class="condicao">Usado pelo lembrete</div>
+          <button class="no" data-no="cabanas" type="button">
+            <div class="titulo">Cabanas <span class="pill editar">editável</span></div>
+            <div class="desc" data-desc></div>
+            <div class="preview" data-preview></div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="editor" id="editor">
+      <div class="vazio">Escolha um balão à esquerda para ver o que o bot faz ali. Boas-vindas e Cabanas já podem ser editados por aqui.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let CHAVE = localStorage.getItem('vp_admin_key') || '';
+  let FLUXO = { nos: [] };
+  let NO_ATUAL = null;
+
+  const LIMITE_WHATSAPP = 4096;
+
+  function fazerLogin() {
+    const valor = document.getElementById('login-key').value.trim();
+    if (!valor) return;
+    CHAVE = valor;
+    localStorage.setItem('vp_admin_key', valor);
+    iniciar();
+  }
+
+  async function authFetch(url, opts = {}) {
+    opts.headers = { ...(opts.headers || {}), 'x-admin-key': CHAVE, 'content-type': 'application/json' };
+    const res = await authFetchBruto(url, opts);
+    if (res.status === 403) throw new Error('chave-invalida');
+    return res;
+  }
+
+  function authFetchBruto(url, opts) { return fetch(url, opts); }
+
+  async function iniciar() {
+    try {
+      const res = await authFetch('/api/fluxo');
+      FLUXO = await res.json();
+    } catch (err) {
+      document.getElementById('login-error').textContent = 'Chave inválida. Confira e tente de novo.';
+      return;
+    }
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').classList.add('visible');
+    preencherTrilha();
+  }
+
+  function noPorId(id) {
+    return FLUXO.nos.find((n) => n.id === id) || null;
+  }
+
+  function preencherTrilha() {
+    document.querySelectorAll('.no').forEach((botao) => {
+      const dados = noPorId(botao.dataset.no);
+      const desc = botao.querySelector('[data-desc]');
+      const preview = botao.querySelector('[data-preview]');
+      if (dados && desc) desc.textContent = dados.descricao;
+      if (preview) {
+        const texto = (dados?.preview || '').trim();
+        if (texto) preview.textContent = texto;
+        else preview.remove();
+      }
+      botao.onclick = () => selecionarNo(botao.dataset.no, botao);
+    });
+  }
+
+  function selecionarNo(id, botao) {
+    document.querySelectorAll('.no').forEach((b) => b.classList.remove('selecionado'));
+    botao.classList.add('selecionado');
+    NO_ATUAL = id;
+    if (id === 'boas-vindas') return abrirEditorBoasVindas();
+    if (id === 'cabanas') return abrirEditorCabanas();
+    abrirLeitura(id, botao);
+  }
+
+  function abrirLeitura(id, botao) {
+    const dados = noPorId(id);
+    const titulo = botao.querySelector('.titulo').childNodes[0].textContent.trim();
+    const editor = document.getElementById('editor');
+    editor.innerHTML = `
+      <h2>${titulo}</h2>
+      <div class="origem">${dados?.arquivo ? 'Vem do arquivo ' + dados.arquivo : 'Comportamento fixo do bot'}</div>
+      <p style="color:var(--muted); font-size:13px; line-height:1.6; margin:0;">${dados?.descricao || 'Essa etapa não tem texto configurável.'}</p>
+      ${dados?.preview ? `<label>O que está valendo hoje</label><div class="leitura">${escapar(dados.preview)}</div>` : ''}
+      <p style="color:var(--muted); font-size:12px; margin-top:18px;">A edição desta etapa pelo painel entra na próxima etapa do projeto. Por enquanto ela é alterada pelo arquivo no GitHub.</p>
+    `;
+  }
+
+  function escapar(t) {
+    return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  async function carregarConfig(nome) {
+    const res = await authFetch('/api/config/' + nome);
+    return res.json();
+  }
+
+  // ---------------- Boas-vindas ----------------
+  async function abrirEditorBoasVindas() {
+    const editor = document.getElementById('editor');
+    editor.innerHTML = '<div class="vazio">Carregando…</div>';
+    const { conteudo: menu, origem } = await carregarConfig('menu.json');
+
+    editor.innerHTML = `
+      <h2>Boas-vindas</h2>
+      <div class="origem">${rotuloOrigem(origem, 'menu.json')}</div>
+      <label for="campo-boas-vindas">Primeira mensagem que todo contato novo recebe</label>
+      <textarea id="campo-boas-vindas" style="min-height:200px;"></textarea>
+      <div class="contador" id="contador-boas-vindas"></div>
+      <p style="color:var(--muted); font-size:12px; margin:10px 0 0;">Negrito no WhatsApp: coloque *asteriscos* colados na palavra. Enter cria uma linha nova.</p>
+      <div id="mensagens"></div>
+      <div class="rodape-editor">
+        <button class="btn-outline" onclick="restaurar('menu.json')">Voltar ao padrão</button>
+        <button class="btn" id="btn-salvar" onclick="salvarBoasVindas()">Salvar</button>
+      </div>
+    `;
+
+    const campo = document.getElementById('campo-boas-vindas');
+    campo.value = menu.welcome_text || '';
+    campo.oninput = () => atualizarContador(campo.value);
+    atualizarContador(campo.value);
+    editor.dataset.menu = JSON.stringify(menu);
+  }
+
+  function atualizarContador(texto) {
+    const el = document.getElementById('contador-boas-vindas');
+    if (!el) return;
+    el.textContent = `${texto.length} de ${LIMITE_WHATSAPP} caracteres`;
+    el.classList.toggle('perto', texto.length > 3000);
+  }
+
+  async function salvarBoasVindas() {
+    const editor = document.getElementById('editor');
+    const menu = JSON.parse(editor.dataset.menu);
+    menu.welcome_text = document.getElementById('campo-boas-vindas').value;
+    await enviar('menu.json', menu, () => { editor.dataset.menu = JSON.stringify(menu); });
+  }
+
+  // ---------------- Cabanas ----------------
+  async function abrirEditorCabanas() {
+    const editor = document.getElementById('editor');
+    editor.innerHTML = '<div class="vazio">Carregando…</div>';
+    const { conteudo: dados, origem } = await carregarConfig('cabanas.json');
+
+    const cards = (dados.cabanas || []).map((c, i) => `
+      <div class="cabana-card">
+        <div class="cabeca">
+          <span class="swatch" style="background:${c.cor || '#6E7F5C'}"></span>
+          <span class="nome">${escapar(c.nome || '(sem nome)')}</span>
+        </div>
+        <label for="cab-codigo-${i}">Código de acesso</label>
+        <input type="text" id="cab-codigo-${i}" value="${escaparAtributo(c.codigo_acesso || '')}" />
+        <label for="cab-wifi-${i}">Senha do wifi</label>
+        <input type="text" id="cab-wifi-${i}" value="${escaparAtributo(c.senha_wifi || '')}" />
+        <label for="cab-rec-${i}">Recomendações enviadas na véspera</label>
+        <textarea id="cab-rec-${i}">${escapar(c.recomendacoes || '')}</textarea>
+      </div>
+    `).join('');
+
+    editor.innerHTML = `
+      <h2>Cabanas</h2>
+      <div class="origem">${rotuloOrigem(origem, 'cabanas.json')}</div>
+      <p style="color:var(--muted); font-size:12.5px; line-height:1.6; margin:0 0 16px;">
+        Esses três campos entram na mensagem que o hóspede recebe na véspera do check-in.
+        Enquanto algum estiver vazio, o bot manda uma mensagem genérica e avisa a equipe.
+      </p>
+      ${cards}
+      <div id="mensagens"></div>
+      <div class="rodape-editor">
+        <button class="btn-outline" onclick="restaurar('cabanas.json')">Voltar ao padrão</button>
+        <button class="btn" id="btn-salvar" onclick="salvarCabanas()">Salvar</button>
+      </div>
+    `;
+    editor.dataset.cabanas = JSON.stringify(dados);
+  }
+
+  function escaparAtributo(t) {
+    return escapar(t).replace(/"/g, '&quot;');
+  }
+
+  async function salvarCabanas() {
+    const editor = document.getElementById('editor');
+    const dados = JSON.parse(editor.dataset.cabanas);
+    dados.cabanas = dados.cabanas.map((c, i) => ({
+      ...c,
+      codigo_acesso: document.getElementById(`cab-codigo-${i}`).value.trim(),
+      senha_wifi: document.getElementById(`cab-wifi-${i}`).value.trim(),
+      recomendacoes: document.getElementById(`cab-rec-${i}`).value.trim(),
+    }));
+    await enviar('cabanas.json', dados, () => { editor.dataset.cabanas = JSON.stringify(dados); });
+  }
+
+  // ---------------- Salvar / restaurar ----------------
+  function rotuloOrigem(origem, arquivo) {
+    return origem === 'painel'
+      ? `Editado por aqui · arquivo ${arquivo}`
+      : `Ainda no texto original do sistema · arquivo ${arquivo}`;
+  }
+
+  function mostrarMensagens({ erros = [], avisos = [], salvo = false }) {
+    const box = document.getElementById('mensagens');
+    if (!box) return;
+    const partes = [];
+    if (erros.length) partes.push(`<div class="erro-box"><strong>Não deu pra salvar:</strong><ul>${erros.map((e) => `<li>${escapar(e)}</li>`).join('')}</ul></div>`);
+    if (avisos.length) partes.push(`<div class="aviso-box"><strong>Salvou, mas confira:</strong><ul>${avisos.map((a) => `<li>${escapar(a)}</li>`).join('')}</ul></div>`);
+    if (salvo && !avisos.length && !erros.length) partes.push('<div class="aviso-box salvo" style="background:var(--moss-pale); border-color:var(--moss-soft);">Salvo. Já vale na próxima mensagem do bot.</div>');
+    box.innerHTML = partes.join('');
+  }
+
+  async function enviar(arquivo, conteudo, aoSalvar) {
+    const botao = document.getElementById('btn-salvar');
+    botao.disabled = true;
+    botao.textContent = 'Salvando…';
+    try {
+      const res = await authFetch('/api/config/' + arquivo, { method: 'PUT', body: JSON.stringify({ conteudo }) });
+      const corpo = await res.json();
+      if (!res.ok || corpo.ok === false) {
+        mostrarMensagens({ erros: corpo.erros || [corpo.erro || 'Erro desconhecido'] });
+        return;
+      }
+      aoSalvar?.();
+      mostrarMensagens({ avisos: corpo.avisos || [], salvo: true });
+      const origemEl = document.querySelector('#editor .origem');
+      if (origemEl) origemEl.textContent = rotuloOrigem('painel', arquivo);
+      await recarregarFluxo();
+    } catch (err) {
+      mostrarMensagens({ erros: ['Não consegui falar com o servidor. Tente de novo em instantes.'] });
+    } finally {
+      botao.disabled = false;
+      botao.textContent = 'Salvar';
+    }
+  }
+
+  async function restaurar(arquivo) {
+    if (!confirm('Voltar ao texto original do sistema? As alterações feitas aqui serão perdidas.')) return;
+    await authFetch(`/api/config/${arquivo}/restaurar`, { method: 'POST' });
+    await recarregarFluxo();
+    if (arquivo === 'menu.json') abrirEditorBoasVindas();
+    else abrirEditorCabanas();
+  }
+
+  async function recarregarFluxo() {
+    const res = await authFetch('/api/fluxo');
+    FLUXO = await res.json();
+    preencherTrilha();
+    const selecionado = document.querySelector(`.no[data-no="${NO_ATUAL}"]`);
+    if (selecionado) selecionado.classList.add('selecionado');
+  }
+
+  document.getElementById('login-key').addEventListener('keydown', (e) => { if (e.key === 'Enter') fazerLogin(); });
+  if (CHAVE) iniciar();
+</script>
+</body>
+</html>
