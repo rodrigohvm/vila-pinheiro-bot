@@ -17,6 +17,7 @@ const {
   ensureParcelaDefaults,
   enrichRegistro,
   buildDashboard,
+  buildEstadias,
   buildClientes,
   buildICSFeed,
   detectarConflitos,
@@ -155,17 +156,27 @@ async function alertarConflitoDeReserva(novo) {
     if (!conflitos.length) return [];
 
     const nomeNovo = novo.tipo === 'cadastro' ? novo.dados?.hospede1?.nome : novo.dados?.hospede;
+    const overbooking = conflitos.filter((c) => c.motivo === 'overbooking');
+    const divergencias = conflitos.filter((c) => c.motivo === 'divergencia');
+
     const linhas = [
-      '⚠️ *Possível conflito de reserva*',
+      overbooking.length ? '🔴 *Overbooking: a cabana já está ocupada nesse período*' : '🟠 *Datas divergentes no mesmo hóspede*',
       '',
       `Acabou de entrar: *${nomeNovo || '(sem nome)'}* — ${novo.dados?.cabana}`,
       `${novo.dados?.checkin} → ${novo.dados?.checkout}`,
-      '',
-      'Já existe nessa cabana, com datas que se sobrepõem:',
-      ...conflitos.map((c) => `• ${c.hospede} — ${c.checkin} → ${c.checkout}`),
-      '',
-      'Confira no CRM antes de confirmar com o hóspede.',
     ];
+
+    if (overbooking.length) {
+      linhas.push('', 'Já existe nessa cabana, com datas que se sobrepõem:', ...overbooking.map((c) => `• ${c.hospede} — ${c.checkin} → ${c.checkout}`));
+    }
+    if (divergencias.length) {
+      linhas.push(
+        '',
+        'Mesmo hóspede com datas que não batem (provável erro de digitação):',
+        ...divergencias.map((c) => `• ${c.hospede} — ${c.checkin} → ${c.checkout}`)
+      );
+    }
+    linhas.push('', 'Confira no CRM antes de confirmar com o hóspede.');
     await notificarEquipe(linhas.join('\n'));
     return conflitos;
   } catch (err) {
@@ -937,11 +948,41 @@ app.get('/api/registros', requireAdminKey, (req, res) => {
   res.json(filtrados.slice().reverse());
 });
 
+// Estadias = mesma coisa que /api/registros, mas com o cadastro do hóspede e a
+// confirmação da equipe FUNDIDOS numa linha só (a fusão é só de exibição — os
+// registros crus continuam intactos e vão junto, em "registros").
+// Filtros: ?estagio=aguardando|confirmada|paga&cabana=&busca=&status_pagamento=
+app.get('/api/estadias', requireAdminKey, (req, res) => {
+  const todos = loadRegistros();
+  const mapaConflitos = detectarConflitos(todos);
+  const hojeISO = new Date().toISOString().slice(0, 10);
+
+  let estadias = buildEstadias(todos, hojeISO, { mapaConflitos, cabanasList: CABANAS });
+  const { cabana, busca, status_pagamento, estagio } = req.query;
+
+  if (estagio) estadias = estadias.filter((e) => e.estagio === estagio);
+  if (cabana) estadias = estadias.filter((e) => normalize(e.cabana || '').includes(normalize(cabana)));
+  if (status_pagamento) estadias = estadias.filter((e) => e.status_pagamento === status_pagamento);
+  if (busca) {
+    const b = normalize(busca);
+    estadias = estadias.filter((e) => normalize(JSON.stringify(e.registros.map((r) => ({ ...r.dados, telefone: r.telefone })))).includes(b));
+  }
+
+  res.json(estadias);
+});
+
 // Resumo geral pro dashboard: ocupação atual, próximos check-ins/checkouts, financeiro.
 app.get('/api/dashboard', requireAdminKey, (req, res) => {
   const registros = loadRegistros();
   const mapaConflitos = detectarConflitos(registros);
-  res.json({ ...buildDashboard(registros, CABANAS), totalConflitos: mapaConflitos.size });
+  // Conta ESTADIAS em conflito, não registros crus — senão uma mesma estadia
+  // com cadastro + reserva contaria 2, e o número não bate com a aba Reservas.
+  const estadias = buildEstadias(registros, undefined, { mapaConflitos, cabanasList: CABANAS });
+  res.json({
+    ...buildDashboard(registros, CABANAS),
+    totalConflitos: estadias.filter((e) => e.conflitos.length).length,
+    totalDivergencias: estadias.filter((e) => e.divergencias.length).length,
+  });
 });
 
 // Clientes agregados (cadastro + reserva casada por telefone/nome). ?busca=texto

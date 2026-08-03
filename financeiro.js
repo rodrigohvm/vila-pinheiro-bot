@@ -341,14 +341,17 @@ function escapeICS(text) {
 }
 
 // ----------------------------------------------------------------------------
-// Conflito de reserva (overbooking): duas estadias na MESMA cabana com datas
-// que se sobrepõem.
+// Sobreposição de datas na MESMA cabana NUNCA é normal — a cabana só comporta
+// uma estadia por vez (sair e entrar no mesmo dia é permitido: o checkout é dia
+// de saída).
 //
-// Cuidado importante: uma mesma estadia costuma gerar 2 registros (o cadastro
-// do hóspede + a confirmação da equipe). Isso NÃO é conflito. Consideramos que
-// são a mesma estadia quando as datas batem exatamente, ou quando o nome do
-// hóspede é o mesmo — assim uma diferença de digitação numa das datas aparece
-// como conflito de verdade, pra alguém conferir.
+// A única exceção é o par de registros da MESMA estadia: o cadastro do hóspede
+// + a confirmação da equipe. Pra ser o mesmo par, as datas precisam bater
+// EXATAMENTE e o nome precisa ser o mesmo. Qualquer sobreposição fora disso é
+// alertada, com dois motivos possíveis:
+//   • overbooking  — pessoas diferentes disputando a mesma cabana
+//   • divergencia  — mesma pessoa com datas que não batem entre um registro e
+//                    outro (erro de digitação / remarcação pela metade)
 // ----------------------------------------------------------------------------
 function nomeDoRegistro(r) {
   return normalize(r.tipo === 'cadastro' ? r.dados?.hospede1?.nome || '' : r.dados?.hospede || '');
@@ -361,9 +364,22 @@ function mesmaPessoa(a, b) {
   return nomeA === nomeB || nomeA.includes(nomeB) || nomeB.includes(nomeA);
 }
 
-function mesmaEstadia(a, b) {
-  if (a.checkin_iso === b.checkin_iso && a.checkout_iso === b.checkout_iso) return true;
+function datasIdenticas(a, b) {
+  return a.checkin_iso === b.checkin_iso && a.checkout_iso === b.checkout_iso;
+}
+
+// Se um dos registros não tem nome, não dá pra afirmar que são pessoas
+// diferentes — com datas idênticas na mesma cabana, o cenário provável é o par
+// cadastro+confirmação, não overbooking.
+function mesmaPessoaOuSemNome(a, b) {
+  if (!nomeDoRegistro(a) || !nomeDoRegistro(b)) return true;
   return mesmaPessoa(a, b);
+}
+
+// Os dois registros descrevem a MESMA estadia (cadastro + confirmação, ou uma
+// duplicata colada 2x). Só isso pode ser fundido numa linha só.
+function mesmaEstadia(a, b) {
+  return datasIdenticas(a, b) && mesmaPessoaOuSemNome(a, b);
 }
 
 function datasSobrepoem(a, b) {
@@ -371,16 +387,27 @@ function datasSobrepoem(a, b) {
   return a.checkin_iso < b.checkout_iso && b.checkin_iso < a.checkout_iso;
 }
 
+function motivoDoAlerta(a, b) {
+  return mesmaPessoa(a, b) ? 'divergencia' : 'overbooking';
+}
+
+const MOTIVOS = {
+  overbooking: 'Duas estadias diferentes na mesma cabana com datas sobrepostas',
+  divergencia: 'Mesmo hóspede, mesma cabana, datas que não batem entre os registros — provável erro de digitação',
+};
+
 // Devolve um Map: id do registro -> lista de conflitos encontrados.
 function detectarConflitos(registros) {
   const validos = registros.filter((r) => r.checkin_iso && r.checkout_iso && r.dados?.cabana);
   const conflitos = new Map();
 
-  function registrar(r, outro) {
+  function registrar(r, outro, motivo) {
     if (!conflitos.has(r.id)) conflitos.set(r.id, []);
     conflitos.get(r.id).push({
       id: outro.id,
       tipo: outro.tipo,
+      motivo,
+      motivo_texto: MOTIVOS[motivo],
       hospede: outro.tipo === 'cadastro' ? outro.dados?.hospede1?.nome || '(sem nome)' : outro.dados?.hospede || '(sem nome)',
       cabana: outro.dados?.cabana,
       checkin: outro.dados?.checkin || outro.checkin_iso,
@@ -395,8 +422,9 @@ function detectarConflitos(registros) {
       if (normalize(a.dados.cabana) !== normalize(b.dados.cabana)) continue;
       if (!datasSobrepoem(a, b)) continue;
       if (mesmaEstadia(a, b)) continue;
-      registrar(a, b);
-      registrar(b, a);
+      const motivo = motivoDoAlerta(a, b);
+      registrar(a, b, motivo);
+      registrar(b, a, motivo);
     }
   }
 
@@ -414,6 +442,8 @@ function conflitosDeUmaEstadia(novo, registros) {
     .map((r) => ({
       id: r.id,
       tipo: r.tipo,
+      motivo: motivoDoAlerta(r, novo),
+      motivo_texto: MOTIVOS[motivoDoAlerta(r, novo)],
       hospede: r.tipo === 'cadastro' ? r.dados?.hospede1?.nome || '(sem nome)' : r.dados?.hospede || '(sem nome)',
       cabana: r.dados.cabana,
       checkin: r.dados?.checkin || r.checkin_iso,
@@ -490,8 +520,159 @@ function montarMensagemCobranca(pendencias) {
   return linhas.join('\n');
 }
 
+// ----------------------------------------------------------------------------
+// ESTADIA = visão fundida (cadastro do hóspede + confirmação da equipe) de uma
+// mesma hospedagem. A fusão acontece SÓ NA LEITURA — os registros crus continuam
+// separados no registros.json, e cada um segue alimentando sua automação
+// (lembrete de véspera vem do cadastro; cobrança de parcela vem da reserva).
+//
+// A regra de agrupamento é o espelho exato da regra de conflito: mesma cabana +
+// datas sobrepostas + (datas idênticas OU mesmo hóspede). Assim, o que NÃO é
+// conflito é a mesma estadia, e vice-versa — os dois nunca se contradizem.
+// ----------------------------------------------------------------------------
+const ESTAGIOS = {
+  aguardando: { label: 'Aguardando confirmação', emoji: '🟡' },
+  confirmada: { label: 'Confirmada', emoji: '🔵' },
+  paga: { label: 'Paga', emoji: '🟢' },
+};
+
+function mesmaCabana(a, b) {
+  return normalize(a.dados?.cabana || '') === normalize(b.dados?.cabana || '');
+}
+
+function agrupavel(a, b) {
+  if (!a.checkin_iso || !a.checkout_iso || !b.checkin_iso || !b.checkout_iso) return false;
+  if (!a.dados?.cabana || !b.dados?.cabana) return false;
+  // Datas iguais + mesma pessoa + mesma cabana. Sobreposição PARCIAL nunca
+  // funde: vira alerta, porque a cabana não pode receber duas estadias ao
+  // mesmo tempo e ninguém deve descobrir isso só na chegada do hóspede.
+  return mesmaCabana(a, b) && mesmaEstadia(a, b);
+}
+
+function agruparPorEstadia(registros) {
+  const grupos = [];
+  for (const r of registros) {
+    const grupo = grupos.find((g) => g.some((x) => agrupavel(x, r)));
+    if (grupo) grupo.push(r);
+    else grupos.push([r]);
+  }
+  return grupos;
+}
+
+// Estágio ≠ status de pagamento: são eixos diferentes. Uma reserva com uma
+// parcela paga e outra em atraso é 🟢 Paga no estágio e "atrasado" no badge de
+// pagamento — por isso olhamos as parcelas, não o status derivado.
+function calcularEstagio(temReserva, parcelas) {
+  if (!temReserva) return 'aguardando';
+  return (parcelas || []).some((p) => p.paga) ? 'paga' : 'confirmada';
+}
+
+function maisRecente(lista) {
+  if (!lista.length) return null;
+  return [...lista].sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')))[lista.length - 1];
+}
+
+// Entre registros duplicados do mesmo tipo, o "principal" é o mais recente que
+// realmente tem o dado que importa (telefone no cadastro, parcelas na reserva).
+// Sem isso, uma confirmação colada 2x poderia eleger a cópia sem parcelas e o
+// CRM mostraria "sem cobrança" enquanto o cron cobra pela outra.
+function escolherPrincipal(lista, temDado) {
+  return maisRecente(lista.filter(temDado)) || maisRecente(lista);
+}
+
+// Padroniza o nome da cabana pelo cadastrado em cabanas.json ("ipe" -> "Ipê"),
+// sem alterar o dado salvo. Se não reconhecer, devolve o que veio.
+function canonizarCabana(nome, cabanasList) {
+  if (!nome) return '';
+  const alvo = normalize(nome);
+  const achada = (cabanasList || []).find((c) => normalize(c.nome) === alvo || alvo.includes(normalize(c.nome)));
+  return achada ? achada.nome : nome;
+}
+
+function buildEstadias(registros, hojeISO = new Date().toISOString().slice(0, 10), { mapaConflitos = null, cabanasList = [] } = {}) {
+  const conflitosPorId = mapaConflitos || detectarConflitos(registros);
+
+  return agruparPorEstadia(registros)
+    .map((grupo) => {
+      const cadastros = grupo.filter((r) => r.tipo === 'cadastro');
+      const reservas = grupo.filter((r) => r.tipo === 'reserva');
+      const cadastro = escolherPrincipal(cadastros, (r) => r.telefone);
+      const reservaCrua = escolherPrincipal(reservas, (r) => r.dados?.parcelas?.length);
+      const reserva = reservaCrua ? enrichRegistro(reservaCrua, hojeISO) : null;
+      const principal = cadastro || reservaCrua || grupo[0];
+
+      const statusPagamento = reserva?.dados?.status_pagamento || null;
+      const estagio = calcularEstagio(Boolean(reservaCrua), reserva?.dados?.parcelas);
+
+      // Conflitos de qualquer membro do grupo, sem repetir e sem apontar pro
+      // próprio grupo (cadastro+reserva da mesma estadia nunca é conflito).
+      const idsDoGrupo = new Set(grupo.map((r) => r.id));
+      const vistos = new Set();
+      const alertas = [];
+      for (const r of grupo) {
+        for (const c of conflitosPorId.get(r.id) || []) {
+          if (idsDoGrupo.has(c.id) || vistos.has(c.id)) continue;
+          vistos.add(c.id);
+          alertas.push(c);
+        }
+      }
+      const conflitos = alertas.filter((c) => c.motivo === 'overbooking');
+      const divergencias = alertas.filter((c) => c.motivo === 'divergencia');
+
+      const duplicados = [...cadastros, ...reservas]
+        .filter((r) => r.id !== cadastro?.id && r.id !== reservaCrua?.id)
+        .map((r) => ({ id: r.id, tipo: r.tipo, timestamp: r.timestamp }));
+
+      return {
+        id: principal.id,
+        estagio,
+        estagio_label: ESTAGIOS[estagio].label,
+        estagio_emoji: ESTAGIOS[estagio].emoji,
+        hospede: cadastro?.dados?.hospede1?.nome || reservaCrua?.dados?.hospede || '(sem nome)',
+        telefone: cadastro?.telefone || null,
+        cabana: canonizarCabana(reservaCrua?.dados?.cabana || cadastro?.dados?.cabana || '', cabanasList),
+        cabana_bruta: reservaCrua?.dados?.cabana || cadastro?.dados?.cabana || '',
+        // A exibição segue o cadastro (é ele que dispara o lembrete de véspera);
+        // se a reserva discordar, isso aparece em "divergencias".
+        checkin: principal.dados?.checkin || principal.checkin_iso || '',
+        checkout: principal.dados?.checkout || principal.checkout_iso || '',
+        checkin_iso: principal.checkin_iso || null,
+        checkout_iso: principal.checkout_iso || null,
+        valor_total: reservaCrua?.dados?.valor_total || '',
+        valor_total_num: parseValorBR(reservaCrua?.dados?.valor_total),
+        status_pagamento: statusPagamento,
+        parcelas: reserva?.dados?.parcelas || [],
+        canal_venda: reservaCrua?.dados?.canal_venda || '',
+        adicionais: reservaCrua?.dados?.adicionais || '',
+        cadastroId: cadastro?.id || null,
+        reservaId: reservaCrua?.id || null,
+        duplicados,
+        // Qual registro cru alimenta qual automação — some a dúvida de "editei
+        // a linha errada e o lembrete não mudou".
+        automacoes: {
+          lembreteVespera: cadastro
+            ? {
+                registroId: cadastro.id,
+                apto: Boolean(cadastro.telefone && cadastro.checkin_iso),
+                enviado: Boolean(cadastro.lembreteEnviado),
+              }
+            : null,
+          cobrancaParcela: reserva?.dados?.parcelas?.length ? { registroId: reservaCrua.id } : null,
+        },
+        conflitos,
+        divergencias,
+        alertas,
+        registros: grupo.map((r) => enrichRegistro(r, hojeISO)),
+      };
+    })
+    .sort((a, b) => String(b.checkin_iso || '').localeCompare(String(a.checkin_iso || '')));
+}
+
 module.exports = {
   normalize,
+  buildEstadias,
+  ESTAGIOS,
+  MOTIVOS,
   detectarConflitos,
   conflitosDeUmaEstadia,
   listarParcelasParaLembrar,
