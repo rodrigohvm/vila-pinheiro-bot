@@ -25,17 +25,22 @@ const {
   listarParcelasParaLembrar,
   montarMensagemCobranca,
 } = require('./financeiro');
-const { fazerBackup, backupConfigurado } = require('./backup');
+const { fazerBackup, fazerBackupConfig, backupConfigurado } = require('./backup');
+const config = require('./config');
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'system-prompt.txt'), 'utf-8');
-const PDFS = JSON.parse(fs.readFileSync(path.join(__dirname, 'pdfs.json'), 'utf-8'));
-const MENU = JSON.parse(fs.readFileSync(path.join(__dirname, 'menu.json'), 'utf-8'));
-const FORMULARIO_CADASTRO = fs.readFileSync(path.join(__dirname, 'formulario-cadastro.txt'), 'utf-8');
-const CABANAS = JSON.parse(fs.readFileSync(path.join(__dirname, 'cabanas.json'), 'utf-8')).cabanas;
+
+// Configuração editável pelo painel (/painel). Deixam de ser constantes de boot:
+// viram funções, lidas do volume a cada uso (com cache invalidado por mtime),
+// pra que uma edição no painel valha na hora, sem redeploy.
+const MENU = () => config.menu();
+const PDFS = () => config.pdfs();
+const CABANAS = () => config.cabanas();
+const FORMULARIO_CADASTRO = () => config.formularioCadastro();
 
 // ----------------------------------------------------------------------------
 // Converte datas em formato brasileiro (ex: "28/07/26", "28/07/2026") para
@@ -56,7 +61,7 @@ function normalizeDateBR(str) {
 function findCabana(nome) {
   if (!nome) return null;
   const alvo = normalize(nome);
-  return CABANAS.find((c) => normalize(c.nome) === alvo || alvo.includes(normalize(c.nome)));
+  return CABANAS().find((c) => normalize(c.nome) === alvo || alvo.includes(normalize(c.nome)));
 }
 
 // Número (com código do país, ex: 5527999999999) da pessoa responsável por
@@ -199,13 +204,13 @@ function normalize(text) {
 
 function matchMenuItem(text) {
   const normalized = normalize(text);
-  return MENU.items.find((item) =>
+  return MENU().items.find((item) =>
     item.aliases.some((alias) => normalized.includes(normalize(alias)))
   );
 }
 
 function findMenuItemById(id) {
-  return MENU.items.find((item) => item.id === id);
+  return MENU().items.find((item) => item.id === id);
 }
 
 // ----------------------------------------------------------------------------
@@ -229,7 +234,7 @@ async function enviarPdfsBoasVindas(to, enviarDocumento) {
   // e reenviar pro WhatsApp, então em sequência isso ficava lento demais.
   // A ordem entre os PDFs deixa de ser garantida, só a posição deles em
   // relação ao menu (que continua vindo por último, com o delay).
-  await Promise.all((MENU.pdfs_boas_vindas || []).map((apelido) => enviarDocumento(to, apelido)));
+  await Promise.all((MENU().pdfs_boas_vindas || []).map((apelido) => enviarDocumento(to, apelido)));
 }
 
 // Extrai as tags [ENVIAR_PDF:apelido] do texto, removendo-as da mensagem
@@ -576,7 +581,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
     // + menu de opções, em vez de já chamar a IA
     if (!contatosBoasVindasEnviadas.has(key)) {
       contatosBoasVindasEnviadas.add(key);
-      await sendWhatsAppMessage(from, MENU.welcome_text);
+      await sendWhatsAppMessage(from, MENU().welcome_text);
       await enviarPdfsBoasVindas(from, sendWhatsAppDocument);
       await sleep(3000); // dá tempo do WhatsApp processar os documentos antes do menu chegar
       await sendWhatsAppInteractiveList(from);
@@ -608,7 +613,7 @@ async function handleWhatsAppMenuItem(to, item) {
   await sendWhatsAppMessage(to, item.response);
   if (item.pdf) await sendWhatsAppDocument(to, item.pdf);
   if (item.followUp) await sendWhatsAppMessage(to, item.followUp);
-  if (item.sendForm) await sendWhatsAppMessage(to, FORMULARIO_CADASTRO);
+  if (item.sendForm) await sendWhatsAppMessage(to, FORMULARIO_CADASTRO());
   if (item.escalate) await encaminharParaEquipe('whatsapp', to, `[menu] ${item.title}`);
 }
 
@@ -622,13 +627,13 @@ async function sendWhatsAppInteractiveList(to) {
       type: 'interactive',
       interactive: {
         type: 'list',
-        body: { text: MENU.menu_prompt_text || 'Escolha uma opção:' },
+        body: { text: MENU().menu_prompt_text || 'Escolha uma opção:' },
         action: {
           button: 'Ver opções',
           sections: [
             {
               title: 'Vila Pinheiro Cabanas',
-              rows: MENU.items.map((item) => ({ id: item.id, title: item.title.slice(0, 24) })),
+              rows: MENU().items.map((item) => ({ id: item.id, title: item.title.slice(0, 24) })),
             },
           ],
         },
@@ -666,7 +671,7 @@ async function sendWhatsAppMessage(to, text) {
 // devolve o Content-Type errado (application/octet-stream), e o WhatsApp então
 // entrega o arquivo como .bin em vez de .pdf pro hóspede.
 async function uploadWhatsAppMedia(apelido) {
-  const driveLink = PDFS[apelido];
+  const driveLink = PDFS()[apelido];
   if (!driveLink) return null;
   const directLink = toDirectDriveLink(driveLink);
 
@@ -687,7 +692,7 @@ async function uploadWhatsAppMedia(apelido) {
 }
 
 async function sendWhatsAppDocument(to, apelido) {
-  if (!PDFS[apelido]) {
+  if (!PDFS()[apelido]) {
     console.warn(`Aviso: apelido de PDF "${apelido}" não encontrado em pdfs.json`);
     return;
   }
@@ -748,7 +753,7 @@ app.post('/webhook/instagram', async (req, res) => {
     // texto numerado (Instagram não tem lista interativa como o WhatsApp)
     if (!contatosBoasVindasEnviadas.has(key)) {
       contatosBoasVindasEnviadas.add(key);
-      await sendInstagramMessage(senderId, MENU.welcome_text);
+      await sendInstagramMessage(senderId, MENU().welcome_text);
       await enviarPdfsBoasVindas(senderId, sendInstagramDocument);
       await sleep(3000);
       await sendInstagramMessage(senderId, buildTextMenu());
@@ -792,8 +797,8 @@ async function sendInstagramMessage(recipientId, text) {
 // interativa tão simples quanto o WhatsApp, então usamos texto numerado).
 // O welcome_text já foi enviado antes disso — aqui só o convite pra escolher.
 function buildTextMenu() {
-  const linhas = MENU.items.map((item, i) => `${i + 1}. ${item.title}`);
-  return `${MENU.menu_prompt_text || 'Como podemos ajudar?'}\n\n${linhas.join('\n')}\n\nÉ só digitar o assunto que você quer saber.`;
+  const linhas = MENU().items.map((item, i) => `${i + 1}. ${item.title}`);
+  return `${MENU().menu_prompt_text || 'Como podemos ajudar?'}\n\n${linhas.join('\n')}\n\nÉ só digitar o assunto que você quer saber.`;
 }
 
 async function handleInstagramMenuItem(recipientId, item) {
@@ -809,7 +814,7 @@ async function handleInstagramMenuItem(recipientId, item) {
 // testado de verdade em uma conversa real do Instagram — só o WhatsApp foi
 // testado até agora.
 async function uploadInstagramMedia(apelido) {
-  const driveLink = PDFS[apelido];
+  const driveLink = PDFS()[apelido];
   if (!driveLink) return null;
   const directLink = toDirectDriveLink(driveLink);
 
@@ -828,7 +833,7 @@ async function uploadInstagramMedia(apelido) {
 }
 
 async function sendInstagramDocument(recipientId, apelido) {
-  if (!PDFS[apelido]) {
+  if (!PDFS()[apelido]) {
     console.warn(`Aviso: apelido de PDF "${apelido}" não encontrado em pdfs.json`);
     return;
   }
@@ -879,6 +884,7 @@ app.get('/admin/status', requireAdminKey, (req, res) => {
     OWNER_WHATSAPP_NUMBER_configurado: Boolean(process.env.OWNER_WHATSAPP_NUMBER),
     STAFF_NUMBERS_lista: STAFF_NUMBERS,
     DATA_DIR: process.env.DATA_DIR || '(não definido, usando padrão)',
+    CONFIG_editada_pelo_painel: config.listar().filter((c) => c.origem === 'painel').map((c) => c.nome),
     BACKUP_DRIVE_configurado: backupConfigurado(),
     total_registros_salvos: loadRegistros().length,
     total_conflitos_de_reserva: detectarConflitos(loadRegistros()).size,
@@ -957,7 +963,7 @@ app.get('/api/estadias', requireAdminKey, (req, res) => {
   const mapaConflitos = detectarConflitos(todos);
   const hojeISO = new Date().toISOString().slice(0, 10);
 
-  let estadias = buildEstadias(todos, hojeISO, { mapaConflitos, cabanasList: CABANAS });
+  let estadias = buildEstadias(todos, hojeISO, { mapaConflitos, cabanasList: CABANAS() });
   const { cabana, busca, status_pagamento, estagio } = req.query;
 
   if (estagio) estadias = estadias.filter((e) => e.estagio === estagio);
@@ -977,9 +983,9 @@ app.get('/api/dashboard', requireAdminKey, (req, res) => {
   const mapaConflitos = detectarConflitos(registros);
   // Conta ESTADIAS em conflito, não registros crus — senão uma mesma estadia
   // com cadastro + reserva contaria 2, e o número não bate com a aba Reservas.
-  const estadias = buildEstadias(registros, undefined, { mapaConflitos, cabanasList: CABANAS });
+  const estadias = buildEstadias(registros, undefined, { mapaConflitos, cabanasList: CABANAS() });
   res.json({
-    ...buildDashboard(registros, CABANAS),
+    ...buildDashboard(registros, CABANAS()),
     totalConflitos: estadias.filter((e) => e.conflitos.length).length,
     totalDivergencias: estadias.filter((e) => e.divergencias.length).length,
   });
@@ -1019,7 +1025,155 @@ app.delete('/api/registros/:id', requireAdminKey, (req, res) => {
 
 // Lista as cabanas configuradas (usado pro filtro, legenda e cores do calendário)
 app.get('/api/cabanas', requireAdminKey, (req, res) => {
-  res.json(CABANAS.map((c) => ({ nome: c.nome, cor: c.cor || '#6E7F5C' })));
+  res.json(CABANAS().map((c) => ({ nome: c.nome, cor: c.cor || '#6E7F5C' })));
+});
+
+// ============================================================================
+// API DE CONFIGURAÇÃO (usada pelo painel do bot em /painel)
+// Toda escrita passa pela validação do config.js — configuração inválida é
+// rejeitada antes de virar arquivo, nunca depois, na cara do hóspede.
+// ============================================================================
+
+// Snapshot no Drive depois de salvar. Nunca bloqueia a resposta do painel: se o
+// Drive estiver fora do ar, a edição continua valendo e o cron das 3h tenta de novo.
+function snapshotConfigEmSegundoPlano(motivo) {
+  if (!backupConfigurado()) return;
+  fazerBackupConfig(configuracaoCompleta())
+    .then((r) => { if (!r.ok) console.warn(`Snapshot da config (${motivo}) não foi:`, r.motivo); })
+    .catch((err) => console.error('Snapshot da config falhou:', err.message));
+}
+
+function configuracaoCompleta() {
+  return Object.fromEntries(config.listar().map(({ nome }) => [nome, config.lerSeguro(nome, null)]));
+}
+
+app.get('/api/config', requireAdminKey, (req, res) => {
+  res.json(config.listar());
+});
+
+app.get('/api/config/:nome', requireAdminKey, (req, res) => {
+  const { nome } = req.params;
+  if (!config.ehEditavel(nome)) return res.status(404).json({ erro: 'Arquivo de configuração desconhecido' });
+  const conteudo = config.lerSeguro(nome, null);
+  if (conteudo === null) return res.status(500).json({ erro: 'Não consegui ler esse arquivo de configuração' });
+  res.json({ nome, origem: config.origemDe(nome), conteudo });
+});
+
+// Confere sem salvar — o painel usa pra mostrar o erro enquanto a pessoa digita.
+app.post('/api/config/:nome/validar', requireAdminKey, (req, res) => {
+  const { nome } = req.params;
+  if (!config.ehEditavel(nome)) return res.status(404).json({ erro: 'Arquivo de configuração desconhecido' });
+  const { erros, avisos } = config.validar(nome, req.body?.conteudo);
+  res.json({ ok: erros.length === 0, erros, avisos });
+});
+
+app.put('/api/config/:nome', requireAdminKey, (req, res) => {
+  const { nome } = req.params;
+  if (!config.ehEditavel(nome)) return res.status(404).json({ erro: 'Arquivo de configuração desconhecido' });
+  if (req.body?.conteudo === undefined) return res.status(400).json({ erro: 'Faltou o campo "conteudo"' });
+
+  try {
+    const resultado = config.salvar(nome, req.body.conteudo);
+    if (!resultado.ok) return res.status(400).json({ ok: false, erros: resultado.erros, avisos: resultado.avisos });
+    console.log(`⚙️ Configuração "${nome}" atualizada pelo painel`);
+    snapshotConfigEmSegundoPlano(`edição de ${nome}`);
+    res.json({ ok: true, avisos: resultado.avisos, origem: 'painel' });
+  } catch (err) {
+    console.error(`Erro salvando configuração "${nome}":`, err.message);
+    res.status(500).json({ erro: 'Não consegui salvar', detalhe: err.message });
+  }
+});
+
+// Desfaz as edições do painel e volta pro arquivo que veio no repositório.
+app.post('/api/config/:nome/restaurar', requireAdminKey, (req, res) => {
+  const { nome } = req.params;
+  try {
+    const resultado = config.restaurarPadrao(nome);
+    if (!resultado.ok) return res.status(400).json(resultado);
+    snapshotConfigEmSegundoPlano(`restauração de ${nome}`);
+    res.json({ ok: true, conteudo: resultado.conteudo, origem: 'repositorio' });
+  } catch (err) {
+    res.status(500).json({ erro: 'Não consegui restaurar', detalhe: err.message });
+  }
+});
+
+// Mapa do bot: cada nó do fluxograma aponta pro arquivo/campo que o alimenta,
+// pra que clicar num balão abra exatamente o texto certo pra editar.
+app.get('/api/fluxo', requireAdminKey, (req, res) => {
+  const menu = MENU();
+  res.json({
+    nos: [
+      {
+        id: 'boas-vindas',
+        titulo: 'Boas-vindas',
+        descricao: 'Primeira mensagem que todo contato novo recebe, antes dos PDFs e do menu.',
+        editavel: true,
+        arquivo: 'menu.json',
+        campo: 'welcome_text',
+        preview: menu.welcome_text || '',
+      },
+      {
+        id: 'pdfs-boas-vindas',
+        titulo: 'PDFs de apresentação',
+        descricao: `Enviados logo depois das boas-vindas (${(menu.pdfs_boas_vindas || []).length} arquivo(s)).`,
+        editavel: false,
+        arquivo: 'menu.json',
+        campo: 'pdfs_boas_vindas',
+        preview: (menu.pdfs_boas_vindas || []).join(', '),
+      },
+      {
+        id: 'menu',
+        titulo: 'Menu de opções',
+        descricao: `${(menu.items || []).length} opção(ões). Responde de graça, por palavra-chave ou clique.`,
+        editavel: false,
+        arquivo: 'menu.json',
+        campo: 'items',
+        preview: (menu.items || []).map((i) => i.title).join(' · '),
+      },
+      {
+        id: 'formulario',
+        titulo: 'Formulário de cadastro',
+        descricao: 'Enviado pela equipe no fechamento da venda. A resposta do hóspede vira registro no CRM.',
+        editavel: false,
+        arquivo: 'formulario-cadastro.txt',
+        campo: null,
+        preview: FORMULARIO_CADASTRO().slice(0, 120),
+      },
+      {
+        id: 'cabanas',
+        titulo: 'Cabanas',
+        descricao: 'Código de acesso, wifi e recomendações usados no lembrete da véspera.',
+        editavel: true,
+        arquivo: 'cabanas.json',
+        campo: 'cabanas',
+        preview: CABANAS().map((c) => c.nome).join(' · '),
+      },
+      {
+        id: 'lembrete-vespera',
+        titulo: 'Lembrete de véspera',
+        descricao: 'Todo dia às 10h, quem faz check-in amanhã recebe código de acesso e wifi.',
+        editavel: false,
+        arquivo: null,
+        campo: null,
+        preview: '',
+      },
+      {
+        id: 'equipe',
+        titulo: 'Encaminhar pra equipe',
+        descricao: 'Qualquer coisa fora do roteiro: o hóspede recebe um aviso e a equipe é notificada.',
+        editavel: false,
+        arquivo: null,
+        campo: null,
+        preview: MENSAGEM_ENCAMINHAMENTO,
+      },
+    ],
+    ia_chat_ativa: IA_CHAT_ATIVA,
+  });
+});
+
+// Serve o painel de configuração do bot (arquivo estático em /public/painel.html)
+app.get('/painel', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'painel.html'));
 });
 
 // Serve o painel web do CRM (arquivo estático em /public/crm.html)
@@ -1187,8 +1341,9 @@ cron.schedule('0 10 * * *', enviarLembretesDeVespera, { timezone: 'America/Sao_P
 // Cobrança de parcelas: todo dia às 9h, antes do expediente
 cron.schedule('0 9 * * *', enviarLembretesDeParcela, { timezone: 'America/Sao_Paulo' });
 
-// Backup no Drive: todo dia às 3h da manhã
+// Backup no Drive: todo dia às 3h da manhã (registros + configuração do painel)
 cron.schedule('0 3 * * *', rodarBackup, { timezone: 'America/Sao_Paulo' });
+cron.schedule('5 3 * * *', () => snapshotConfigEmSegundoPlano('rotina diária'), { timezone: 'America/Sao_Paulo' });
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
