@@ -1101,12 +1101,16 @@ app.post('/api/config/:nome/restaurar', requireAdminKey, (req, res) => {
 // pra que clicar num balão abra exatamente o texto certo pra editar.
 app.get('/api/fluxo', requireAdminKey, (req, res) => {
   const menu = MENU();
+  const cabanas = CABANAS();
+  const itens = menu.items || [];
+
   res.json({
+    ia_chat_ativa: IA_CHAT_ATIVA,
     nos: [
       {
         id: 'boas-vindas',
         titulo: 'Boas-vindas',
-        descricao: 'Primeira mensagem que todo contato novo recebe, antes dos PDFs e do menu.',
+        descricao: 'Primeira mensagem de quem nunca escreveu antes.',
         editavel: true,
         arquivo: 'menu.json',
         campo: 'welcome_text',
@@ -1115,42 +1119,80 @@ app.get('/api/fluxo', requireAdminKey, (req, res) => {
       {
         id: 'pdfs-boas-vindas',
         titulo: 'PDFs de apresentação',
-        descricao: `Enviados logo depois das boas-vindas (${(menu.pdfs_boas_vindas || []).length} arquivo(s)).`,
+        descricao: `${(menu.pdfs_boas_vindas || []).length} arquivo(s) enviados logo depois das boas-vindas.`,
         editavel: false,
         arquivo: 'menu.json',
         campo: 'pdfs_boas_vindas',
-        preview: (menu.pdfs_boas_vindas || []).join(', '),
+        preview: (menu.pdfs_boas_vindas || []).join('\n'),
       },
       {
         id: 'menu',
         titulo: 'Menu de opções',
-        descricao: `${(menu.items || []).length} opção(ões). Responde de graça, por palavra-chave ou clique.`,
+        descricao: `${itens.length} opção(ões). Responde de graça, sem usar a IA.`,
         editavel: false,
         arquivo: 'menu.json',
         campo: 'items',
-        preview: (menu.items || []).map((i) => i.title).join(' · '),
+        preview: itens.map((i) => `• ${i.title}`).join('\n'),
+      },
+      {
+        id: 'menu-prompt',
+        titulo: 'Convite pra escolher',
+        descricao: 'Texto que aparece junto da lista de opções.',
+        editavel: false,
+        arquivo: 'menu.json',
+        campo: 'menu_prompt_text',
+        preview: menu.menu_prompt_text || '',
+      },
+      {
+        id: 'reserva-crm',
+        titulo: 'Reserva vai pro CRM',
+        descricao: `Só vale para os ${STAFF_NUMBERS.length} número(s) da equipe. Lê hóspede, cabana, datas, valor e parcelas.`,
+        editavel: false,
+        arquivo: null,
+        campo: null,
+        preview: '',
+      },
+      {
+        id: 'cadastro-crm',
+        titulo: 'Cadastro vai pro CRM',
+        descricao: 'O hóspede recebe uma confirmação e a equipe é avisada na hora.',
+        editavel: false,
+        arquivo: null,
+        campo: null,
+        preview: 'Recebemos seu cadastro! 🙌 Nosso time já foi avisado e vai confirmar sua reserva em breve.',
       },
       {
         id: 'formulario',
         titulo: 'Formulário de cadastro',
-        descricao: 'Enviado pela equipe no fechamento da venda. A resposta do hóspede vira registro no CRM.',
+        descricao: 'A equipe envia à mão no fechamento da venda. A resposta do hóspede vira registro no CRM.',
         editavel: false,
         arquivo: 'formulario-cadastro.txt',
         campo: null,
-        preview: FORMULARIO_CADASTRO().slice(0, 120),
+        preview: FORMULARIO_CADASTRO(),
       },
       {
-        id: 'cabanas',
-        titulo: 'Cabanas',
-        descricao: 'Código de acesso, wifi e recomendações usados no lembrete da véspera.',
-        editavel: true,
-        arquivo: 'cabanas.json',
-        campo: 'cabanas',
-        preview: CABANAS().map((c) => c.nome).join(' · '),
+        id: 'equipe',
+        titulo: 'Encaminha pra equipe',
+        descricao: 'Qualquer coisa fora do roteiro: o hóspede recebe um aviso e a equipe é notificada.',
+        editavel: false,
+        arquivo: null,
+        campo: null,
+        preview: MENSAGEM_ENCAMINHAMENTO,
+      },
+      {
+        id: 'ia-chat',
+        titulo: 'Chat da IA',
+        descricao: IA_CHAT_ATIVA
+          ? 'Ligado: a IA responde perguntas fora do menu.'
+          : 'Desligado. Nada é respondido pela IA — tudo fora do roteiro vai pra equipe.',
+        editavel: false,
+        arquivo: null,
+        campo: null,
+        preview: '',
       },
       {
         id: 'lembrete-vespera',
-        titulo: 'Lembrete de véspera',
+        titulo: 'Lembrete da véspera',
         descricao: 'Todo dia às 10h, quem faz check-in amanhã recebe código de acesso e wifi.',
         editavel: false,
         arquivo: null,
@@ -1158,16 +1200,35 @@ app.get('/api/fluxo', requireAdminKey, (req, res) => {
         preview: '',
       },
       {
-        id: 'equipe',
-        titulo: 'Encaminhar pra equipe',
-        descricao: 'Qualquer coisa fora do roteiro: o hóspede recebe um aviso e a equipe é notificada.',
+        id: 'cabanas',
+        titulo: 'Cabanas',
+        descricao: `${cabanas.length} cabana(s). Código de acesso, wifi e recomendações usados no lembrete.`,
+        editavel: true,
+        arquivo: 'cabanas.json',
+        campo: 'cabanas',
+        preview: cabanas.map((c) => `• ${c.nome}`).join('\n'),
+      },
+      {
+        id: 'cobranca-parcela',
+        titulo: 'Cobrança de parcelas',
+        descricao: `Todo dia às 9h, a equipe recebe as parcelas atrasadas e as que vencem em ${DIAS_ANTECEDENCIA_PARCELA} dias. Nunca vai pro hóspede.`,
         editavel: false,
         arquivo: null,
         campo: null,
-        preview: MENSAGEM_ENCAMINHAMENTO,
+        preview: '',
+      },
+      {
+        id: 'backup',
+        titulo: 'Backup no Drive',
+        descricao: backupConfigurado()
+          ? 'Todo dia às 3h, uma cópia do CRM e da configuração vai pro Google Drive.'
+          : 'Ainda não configurado — faltam as variáveis do Google Drive.',
+        editavel: false,
+        arquivo: null,
+        campo: null,
+        preview: '',
       },
     ],
-    ia_chat_ativa: IA_CHAT_ATIVA,
   });
 });
 
